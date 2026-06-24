@@ -35,7 +35,7 @@ SITES = [
         "name": "Pokemon Center",
         "url": "https://www.pokemoncenter.com/en-au/category/booster-packs",
         "allowed_prefix": "https://www.pokemoncenter.com/en-au",
-        "js": True
+        "js": False
     },
     {
         "name": "Kmart",
@@ -58,16 +58,28 @@ SITES = [
 ]
 
 TARGET_KEYWORDS = [
-    "sv11a", "sv11b",
-    "ascended heroes",
-    "30th anniversary",
-    "30th collection",
-    "mega forces"
+    "ascended heroes", "sv11a",
+    "pitch black", "sv11b",
+    "30th anniversary", "30th collection",
+    "mega forces", "mega evolution",
 ]
 
 BLOCKED_KEYWORDS = [
     "binder", "sleeves", "playmat",
     "deck box", "album", "case", "book"
+]
+
+AVAILABILITY_KEYWORDS = [
+    "pre-order", "preorder", "pre order",
+    "available now", "coming soon",
+    "notify me",
+    "add to cart",
+    "add to basket",
+    "buy now",
+    "in stock",
+    "order now",
+    "add to bag",
+    "reserve now"
 ]
 
 # =========================
@@ -87,79 +99,86 @@ def log(level, msg, site=None):
 
 def load_state():
     if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r") as f:
-                data = json.load(f)
-
-            cleaned = {}
-            for k in data.keys():
-                if isinstance(k, str):
-                    cleaned[k] = True
-
-            log("STATE", f"Loaded {len(cleaned)} seen products")
-            return cleaned
-
-        except Exception as e:
-            log("ERROR", f"State load failed: {e}")
-            return {}
-
-    log("STATE", "No existing state file found")
-    return {}
+        with open(STATE_FILE, "r") as f:
+            return set(json.load(f))
+    return set()
 
 def save_state(state):
-    safe_state = {str(k): True for k in state.keys()}
-
     with open(STATE_FILE, "w") as f:
-        json.dump(safe_state, f, indent=2)
-
-    log("STATE", f"Saved {len(safe_state)} products")
+        json.dump(sorted(list(state)), f, indent=2)
 
 # =========================
 # DISCORD
 # =========================
 
-def send_alert(site, url, matches):
-    log("ALERT", f"Sending Discord alert for {url}", site)
+def discord_ping_startup():
+    requests.post(
+        DISCORD_WEBHOOK,
+        json={"content": "🟢 Pokémon tracker ONLINE"},
+        timeout=10
+    )
+
+def send_crash(message):
+    try:
+        requests.post(
+            DISCORD_WEBHOOK,
+            json={"content": f"❌ Pokémon tracker CRASHED:\n```{message}```"},
+            timeout=10
+        )
+    except:
+        pass
+
+def send_alert(site, url, targets, availability):
+    log("ALERT", "Sending Discord alert", site)
+
+    embed = {
+        "title": "🚨 NEW POKéMON PRODUCT DETECTED",
+        "description": f"**{site}** Pokémon booster product found",
+        "color": 16711680,
+        "fields": [
+            {"name": "Product URL", "value": url[:1024]},
+            {"name": "Matches", "value": ", ".join(targets) or "None"},
+            {"name": "Status", "value": ", ".join(availability) or "None"},
+            {"name": "Time", "value": str(datetime.now())}
+        ]
+    }
 
     requests.post(
         DISCORD_WEBHOOK,
-        json={
-            "content": "@everyone 🚨 NEW PRODUCT",
-            "embeds": [{
-                "title": site,
-                "description": url,
-                "fields": [
-                    {"name": "Matches", "value": ", ".join(matches)}
-                ]
-            }]
-        },
+        json={"content": "@everyone 🚨 BOOSTER DROP DETECTED", "embeds": [embed]},
         timeout=10
     )
 
 # =========================
-# SCRAPE CATEGORY
+# SCRAPERS
 # =========================
 
-def scrape(url, site_name, use_js=False):
-    log("SCRAPE", url, site_name)
-
-    if use_js:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto(url, timeout=30000)
-            html = page.content()
-            browser.close()
-
-        soup = BeautifulSoup(html, "html.parser")
-    else:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-    log("SCRAPE", f"Found {len(soup.find_all('a'))} links", site_name)
+def scrape_static(url, site):
+    log("SCRAPE", url, site)
+    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+    soup = BeautifulSoup(r.text, "html.parser")
+    log("SCRAPE", f"Found {len(soup.find_all('a'))} links", site)
     return soup
 
-def extract_links(soup, base_url, allowed_prefix, site_name):
+def scrape_js(url, site):
+    log("SCRAPE", f"JS render {url}", site)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(url, timeout=30000)
+        html = page.content()
+        browser.close()
+
+    soup = BeautifulSoup(html, "html.parser")
+    log("SCRAPE", f"Found {len(soup.find_all('a'))} links", site)
+    return soup
+
+# =========================
+# PRODUCT EXTRACTION
+# =========================
+
+def extract_product_links(soup, base_url, allowed_prefix, site):
     links = set()
 
     for a in soup.find_all("a", href=True):
@@ -168,13 +187,10 @@ def extract_links(soup, base_url, allowed_prefix, site_name):
         if not href.startswith(allowed_prefix):
             continue
 
-        if any(x in href for x in [
-            "/product", "/products", "/p/", "/c/",
-            "/collections", "/featured", "/category"
-        ]):
+        if "/product" in href or "/products/" in href or "/p/" in href:
             links.add(href)
 
-    log("FOUND", f"{len(links)} product links", site_name)
+    log("FOUND", f"{len(links)} product links", site)
     return links
 
 # =========================
@@ -183,72 +199,82 @@ def extract_links(soup, base_url, allowed_prefix, site_name):
 
 product_cache = {}
 
-def check_product(url, site_name):
+def check_product_page(url, site):
     if url in product_cache:
         return product_cache[url]
 
-    log("CHECK", url, site_name)
+    log("CHECK", url, site)
 
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     soup = BeautifulSoup(r.text, "html.parser")
 
-    text = (soup.title.get_text(" ", strip=True) if soup.title else "") + " " + soup.get_text(" ", strip=True)
-    text = text.lower()
+    title = soup.title.get_text(" ", strip=True).lower() if soup.title else ""
+    headings = " ".join(h.get_text(" ", strip=True).lower() for h in soup.find_all(["h1", "h2"]))
+    body = soup.get_text(" ", strip=True).lower()
 
-    if any(b in text for b in BLOCKED_KEYWORDS):
-        log("BLOCKED", url, site_name)
-        product_cache[url] = (False, [])
-        return False, []
+    combined = f"{title} {headings} {body}"
 
-    matches = [k for k in TARGET_KEYWORDS if k in text]
+    # FIXED: correct variable (was "text")
+    if any(b in combined for b in BLOCKED_KEYWORDS):
+        log("BLOCKED", url, site)
+        product_cache[url] = ([], [], False)
+        return [], [], False
 
-    if not matches:
-        log("SKIP", f"No keyword match -> {url}", site_name)
-        product_cache[url] = (False, [])
-        return False, []
+    matches = [k for k in TARGET_KEYWORDS if k in combined]
+    availability = [k for k in AVAILABILITY_KEYWORDS if k in combined]
 
-    if "booster" not in text:
-        log("SKIP", f"No booster -> {url}", site_name)
-        product_cache[url] = (False, [])
-        return False, []
+    booster_ok = "booster" in combined
 
-    log("MATCH", f"{url} -> {matches}", site_name)
+    product_cache[url] = (matches, availability, booster_ok)
 
-    product_cache[url] = (True, matches)
-    return True, matches
+    log("MATCH", f"{url} -> {matches}", site)
+
+    return matches, availability, booster_ok
 
 # =========================
 # MAIN LOOP
 # =========================
 
-def run_cycle(state):
+def run_cycle(known_products):
 
     log("SYSTEM", "Starting scan cycle")
 
     for site in SITES:
 
-        log("SITE", site["name"], site["name"])
+        name = site["name"]
 
-        soup = scrape(site["url"], site["name"], site.get("js", False))
-        links = extract_links(soup, site["url"], site["allowed_prefix"], site["name"])
+        try:
+            soup = scrape_static(site["url"], name) if not site["js"] else scrape_js(site["url"], name)
 
-        for url in links:
+            links = extract_product_links(
+                soup,
+                site["url"],
+                site["allowed_prefix"],
+                name
+            )
 
-            key = f"{site['name']}::{url}"
+            for url in links:
 
-            if key in state:
-                log("SEEN", url, site["name"])
-                continue
+                key = f"{name}::{url}"
 
-            state[key] = True
-            log("NEW", url, site["name"])
+                if key in known_products:
+                    log("SEEN", url, name)
+                    continue
 
-            ok, matches = check_product(url, site["name"])
+                known_products.add(key)
+                log("NEW", url, name)
 
-            if ok:
-                send_alert(site["name"], url, matches)
+                matches, availability, booster_ok = check_product_page(url, name)
 
-    save_state(state)
+                if matches and booster_ok:
+                    send_alert(name, url, matches, availability)
+
+        except Exception as e:
+            log("ERROR", str(e), name)
+            send_crash(f"{name} error: {e}")
+
+    save_state(known_products)
+    log("STATE", f"Saved {len(known_products)} products")
 
 # =========================
 # MAIN
@@ -256,16 +282,18 @@ def run_cycle(state):
 
 def main():
 
-    state = load_state()
+    known_products = load_state()
 
+    discord_ping_startup()
     log("SYSTEM", "🟢 Tracker running")
 
     while True:
         start = time.time()
 
         try:
-            run_cycle(state)
+            run_cycle(known_products)
         except Exception as e:
+            send_crash(str(e))
             log("FATAL", str(e))
 
         time.sleep(max(5, POLL_INTERVAL - (time.time() - start)))
