@@ -5,12 +5,15 @@ import json
 import os
 import time
 from urllib.parse import urljoin
+import os
+from dotenv import load_dotenv
 
 # =========================
 # CONFIG
 # =========================
 
-DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1519121141862760628/3yxReFPKTxZ4xhMmhSRGQsJaVdab0n8yKsV3l1DVdvryH6GrTnLUCfzYXedh4nLFJiph"
+load_dotenv()
+DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 STATE_FILE = "state.json"
 
 POLL_INTERVAL = 30
