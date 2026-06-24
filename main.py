@@ -9,7 +9,7 @@ from urllib.parse import urlsplit, urlunsplit, urljoin
 # CONFIG
 # =========================
 
-DISCORD_WEBHOOK = "YOUR_WEBHOOK_HERE"
+DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1519121141862760628/3yxReFPKTxZ4xhMmhSRGQsJaVdab0n8yKsV3l1DVdvryH6GrTnLUCfzYXedh4nLFJiph"
 STATE_FILE = "state.json"
 
 SITES = [
