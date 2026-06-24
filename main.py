@@ -4,7 +4,6 @@ from datetime import datetime
 import json
 import os
 import time
-import hashlib
 from urllib.parse import urljoin
 from dotenv import load_dotenv
 
@@ -70,6 +69,17 @@ BLOCKED_KEYWORDS = [
 ]
 
 # =========================
+# LOGGING
+# =========================
+
+def log(level, msg, site=None):
+    now = datetime.now().strftime("%H:%M:%S")
+    if site:
+        print(f"[{now}] [{level}] [{site}] {msg}")
+    else:
+        print(f"[{now}] [{level}] {msg}")
+
+# =========================
 # STATE
 # =========================
 
@@ -79,30 +89,36 @@ def load_state():
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
 
-            # force cleanup: ensure all values are simple
             cleaned = {}
-            for k, v in data.items():
+            for k in data.keys():
                 if isinstance(k, str):
                     cleaned[k] = True
+
+            log("STATE", f"Loaded {len(cleaned)} seen products")
             return cleaned
 
-        except:
+        except Exception as e:
+            log("ERROR", f"State load failed: {e}")
             return {}
 
+    log("STATE", "No existing state file found")
     return {}
 
 def save_state(state):
-    # force JSON-safe dict
     safe_state = {str(k): True for k in state.keys()}
 
     with open(STATE_FILE, "w") as f:
         json.dump(safe_state, f, indent=2)
+
+    log("STATE", f"Saved {len(safe_state)} products")
 
 # =========================
 # DISCORD
 # =========================
 
 def send_alert(site, url, matches):
+    log("ALERT", f"Sending Discord alert for {url}", site)
+
     requests.post(
         DISCORD_WEBHOOK,
         json={
@@ -122,11 +138,16 @@ def send_alert(site, url, matches):
 # SCRAPE CATEGORY
 # =========================
 
-def scrape(url):
-    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    return BeautifulSoup(r.text, "html.parser")
+def scrape(url, site_name):
+    log("SCRAPE", url, site_name)
 
-def extract_links(soup, base_url, allowed_prefix):
+    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    log("SCRAPE", f"Found {len(soup.find_all('a'))} links", site_name)
+    return soup
+
+def extract_links(soup, base_url, allowed_prefix, site_name):
     links = set()
 
     for a in soup.find_all("a", href=True):
@@ -141,17 +162,20 @@ def extract_links(soup, base_url, allowed_prefix):
         ]):
             links.add(href)
 
+    log("FOUND", f"{len(links)} product links", site_name)
     return links
 
 # =========================
-# PRODUCT CHECK (ONLY ONCE PER PRODUCT)
+# PRODUCT CHECK
 # =========================
 
-product_cache = {}   # URL -> (valid, matches)
+product_cache = {}
 
-def check_product(url):
+def check_product(url, site_name):
     if url in product_cache:
         return product_cache[url]
+
+    log("CHECK", url, site_name)
 
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -160,17 +184,23 @@ def check_product(url):
     text = text.lower()
 
     if any(b in text for b in BLOCKED_KEYWORDS):
+        log("BLOCKED", url, site_name)
         product_cache[url] = (False, [])
         return False, []
 
     matches = [k for k in TARGET_KEYWORDS if k in text]
+
     if not matches:
+        log("SKIP", f"No keyword match -> {url}", site_name)
         product_cache[url] = (False, [])
         return False, []
 
     if "booster" not in text:
+        log("SKIP", f"No booster -> {url}", site_name)
         product_cache[url] = (False, [])
         return False, []
+
+    log("MATCH", f"{url} -> {matches}", site_name)
 
     product_cache[url] = (True, matches)
     return True, matches
@@ -181,22 +211,27 @@ def check_product(url):
 
 def run_cycle(state):
 
+    log("SYSTEM", "Starting scan cycle")
+
     for site in SITES:
 
-        soup = scrape(site["url"])
-        links = extract_links(soup, site["url"], site["allowed_prefix"])
+        log("SITE", site["name"], site["name"])
+
+        soup = scrape(site["url"], site["name"])
+        links = extract_links(soup, site["url"], site["allowed_prefix"], site["name"])
 
         for url in links:
 
             key = f"{site['name']}::{url}"
 
-            # 🔥 ONLY NEW PRODUCTS GET FULL CHECK
             if key in state:
+                log("SEEN", url, site["name"])
                 continue
 
-            state[key] = True  # mark immediately
+            state[key] = True
+            log("NEW", url, site["name"])
 
-            ok, matches = check_product(url)
+            ok, matches = check_product(url, site["name"])
 
             if ok:
                 send_alert(site["name"], url, matches)
@@ -211,7 +246,7 @@ def main():
 
     state = load_state()
 
-    print("🟢 Tracker running")
+    log("SYSTEM", "🟢 Tracker running")
 
     while True:
         start = time.time()
@@ -219,7 +254,7 @@ def main():
         try:
             run_cycle(state)
         except Exception as e:
-            print("ERROR:", e)
+            log("FATAL", str(e))
 
         time.sleep(max(5, POLL_INTERVAL - (time.time() - start)))
 
