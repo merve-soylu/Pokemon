@@ -23,43 +23,36 @@ SITES = [
         "name": "JB HiFi",
         "url": "https://www.jbhifi.com.au/collections/collectibles-merchandise/pokemon-trading-cards",
         "allowed_prefix": "https://www.jbhifi.com.au",
-        "js": True
     },
     {
         "name": "EB Games",
         "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "allowed_prefix": "https://www.ebgames.com.au",
-        "js": True
     },
     {
         "name": "Pokemon Center",
         "url": "https://www.pokemoncenter.com/en-au/category/booster-packs",
         "allowed_prefix": "https://www.pokemoncenter.com/en-au",
-        "js": False
     },
     {
         "name": "Kmart",
         "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
         "allowed_prefix": "https://www.kmart.com.au",
-        "js": True
     },
     {
         "name": "Officeworks",
         "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
         "allowed_prefix": "https://www.officeworks.com.au",
-        "js": True
     },
     {
         "name": "Target",
         "url": "https://www.target.com.au/c/toys/trading-card-games/pokemon-cards/W1852642",
         "allowed_prefix": "https://www.target.com.au",
-        "js": True
     },
     {
         "name": "Gameology",
         "url": "https://www.gameology.com.au/collections/pokemon",
         "allowed_prefix": "https://www.gameology.com.au",
-        "js": False
     }
 ]
 
