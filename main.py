@@ -5,7 +5,6 @@ import json
 import os
 import time
 from urllib.parse import urljoin
-import os
 from dotenv import load_dotenv
 
 # =========================
@@ -14,8 +13,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-STATE_FILE = "state.json"
 
+STATE_FILE = "state.json"
 POLL_INTERVAL = 30
 
 SITES = [
@@ -45,8 +44,8 @@ SITES = [
     },
     {
         "name": "Kmart",
-        "url": "https://www.kmart.com.au/category/toys/pokemon/",
-        "allowed_prefix": "https://www.kmart.com.au/category/toys/pokemon",
+        "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
+        "allowed_prefix": "https://www.kmart.com.au",
         "js": True
     },
     {
@@ -59,9 +58,9 @@ SITES = [
 
 TARGET_KEYWORDS = [
     "ascended heroes", "sv11a",
-    "pitch black", "sv11b",
+    "sv11b",
     "30th anniversary", "30th collection",
-    "mega forces", "mega evolution",
+    "mega forces",
 ]
 
 AVAILABILITY_KEYWORDS = [
@@ -77,6 +76,20 @@ AVAILABILITY_KEYWORDS = [
     "reserve now"
 ]
 
+# unwanted product types
+BLOCKED_KEYWORDS = [
+    "display",
+    "binder",
+    "portfolio",
+    "album",
+    "sleeves",
+    "playmat",
+    "deck box",
+    "storage",
+    "accessory",
+    "case"
+]
+
 # =========================
 # STATE
 # =========================
@@ -84,12 +97,12 @@ AVAILABILITY_KEYWORDS = [
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
-            return set(json.load(f))
-    return set()
+            return json.load(f)
+    return {}
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
-        json.dump(sorted(list(state)), f, indent=2)
+        json.dump(state, f, indent=2)
 
 # =========================
 # DISCORD
@@ -98,36 +111,37 @@ def save_state(state):
 def discord_ping_startup():
     requests.post(
         DISCORD_WEBHOOK,
-        json={"content": "🟢 Pokémon tracker ONLINE"},
+        json={"content": "🟢 Pokémon BOOSTER tracker ONLINE"},
         timeout=10
     )
 
-def send_crash(message):
+def send_crash(msg):
     try:
         requests.post(
             DISCORD_WEBHOOK,
-            json={"content": f"❌ Pokémon tracker CRASHED:\n```{message}```"},
+            json={"content": f"❌ TRACKER CRASH:\n```{msg}```"},
             timeout=10
         )
     except:
         pass
 
-def send_alert(site, url, targets, availability):
-    embed = {
-        "title": "🚨 NEW POKéMON PRODUCT DETECTED",
-        "description": f"**{site}** Pokémon booster product found",
-        "color": 16711680,
-        "fields": [
-            {"name": "Product URL", "value": url[:1024]},
-            {"name": "Matches", "value": ", ".join(targets) or "None"},
-            {"name": "Status", "value": ", ".join(availability) or "None"},
-            {"name": "Time", "value": str(datetime.now())}
-        ]
-    }
-
+def send_alert(site, url, matches, status, change_type):
     requests.post(
         DISCORD_WEBHOOK,
-        json={"content": "@everyone 🚨 BOOSTER DROP DETECTED", "embeds": [embed]},
+        json={
+            "content": f"🚨 {change_type} DETECTED @everyone",
+            "embeds": [{
+                "title": "Pokémon Booster Alert",
+                "description": f"**{site}**",
+                "color": 16711680,
+                "fields": [
+                    {"name": "URL", "value": url[:1024]},
+                    {"name": "Sets", "value": ", ".join(matches) or "None"},
+                    {"name": "Status", "value": status or "None"},
+                    {"name": "Time", "value": str(datetime.now())}
+                ]
+            }]
+        },
         timeout=10
     )
 
@@ -153,7 +167,7 @@ def scrape_js(url):
     return html, BeautifulSoup(html, "html.parser")
 
 # =========================
-# PRODUCT EXTRACTION
+# PRODUCT LINKS
 # =========================
 
 def extract_product_links(soup, base_url, allowed_prefix):
@@ -165,13 +179,13 @@ def extract_product_links(soup, base_url, allowed_prefix):
         if not href.startswith(allowed_prefix):
             continue
 
-        if "/product" in href or "/products/" in href or "/p/" in href:
+        if any(x in href for x in ["/product", "/products/", "/p/"]):
             links.add(href)
 
     return links
 
 # =========================
-# PRODUCT CHECK (IMPROVED BOOSTER LOGIC)
+# PRODUCT CHECK (NEW LOGIC)
 # =========================
 
 def check_product_page(url):
@@ -181,32 +195,37 @@ def check_product_page(url):
 
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # Clean text sources (reduces noise)
         title = soup.title.get_text(" ", strip=True).lower() if soup.title else ""
-        headings = " ".join(h.get_text(" ", strip=True).lower() for h in soup.find_all(["h1", "h2"]))
-        body_text = soup.get_text(" ", strip=True).lower()
+        h1 = soup.find("h1")
+        h1_text = h1.get_text(" ", strip=True).lower() if h1 else ""
 
-        combined = f"{title} {headings} {body_text}"
+        combined = f"{title} {h1_text} {soup.get_text(' ', strip=True).lower()}"
 
-        # keyword match
+        # MUST contain booster
+        if "booster" not in combined:
+            return None, None
+
+        # block unwanted product types
+        if any(b in combined for b in BLOCKED_KEYWORDS):
+            return None, None
+
         matches = [k for k in TARGET_KEYWORDS if k in combined]
-        availability = [k for k in AVAILABILITY_KEYWORDS if k in combined]
+        if not matches:
+            return None, None
 
-        # STRICT BOOSTER FILTER
-        booster_ok = "booster" in title or "booster" in headings
+        status_hits = [k for k in AVAILABILITY_KEYWORDS if k in combined]
+        status = status_hits[0] if status_hits else "unknown"
 
-        return matches, availability, booster_ok
+        return matches, status
 
     except:
-        return [], [], False
+        return None, None
 
 # =========================
-# ONE SCAN CYCLE
+# MAIN CYCLE (STATE TRACKING)
 # =========================
 
-def run_cycle(known_products):
-
-    updated = False
+def run_cycle(state):
 
     for site in SITES:
 
@@ -216,38 +235,37 @@ def run_cycle(known_products):
             else:
                 html, soup = scrape_static(site["url"])
 
-            new_links = extract_product_links(
+            links = extract_product_links(
                 soup,
                 site["url"],
                 site["allowed_prefix"]
             )
 
-            for product_url in new_links:
+            for url in links:
 
-                key = f"{site['name']}::{product_url}"
+                if url not in state:
+                    state[url] = {}
 
-                if key in known_products:
+                old_status = state[url].get("status")
+
+                matches, status = check_product_page(url)
+
+                if not matches:
                     continue
 
-                matches, availability, booster_ok = check_product_page(product_url)
+                # NEW PRODUCT
+                if old_status is None:
+                    send_alert(site["name"], url, matches, status, "NEW PRODUCT")
 
-                # FINAL FILTER LOGIC:
-                # - must match Pokémon set
-                # - must be booster product
-                if matches and booster_ok:
+                # STATUS CHANGE
+                elif status != old_status:
+                    send_alert(site["name"], url, matches, status, "STATUS CHANGE")
 
-                    send_alert(site["name"], product_url, matches, availability)
-                    print(f"[{datetime.now()}] BOOSTER DROP: {product_url}")
-
-                known_products.add(key)
-                updated = True
+                state[url]["status"] = status
+                state[url]["last_seen"] = str(datetime.now())
 
         except Exception as e:
-            send_crash(f"{site['name']} error: {e}")
-            print(f"{site['name']} error: {e}")
-
-    if updated:
-        save_state(known_products)
+            send_crash(f"{site['name']}: {e}")
 
 # =========================
 # MAIN LOOP
@@ -255,17 +273,18 @@ def run_cycle(known_products):
 
 def main():
 
-    known_products = load_state()
+    state = load_state()
 
     discord_ping_startup()
+    print("🟢 Pokémon tracker running (STATE + STATUS MODE)")
 
-    print("🟢 Pokémon tracker running...")
     while True:
 
         start = time.time()
 
         try:
-            run_cycle(known_products)
+            run_cycle(state)
+            save_state(state)
 
         except Exception as e:
             send_crash(str(e))
