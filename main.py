@@ -58,10 +58,9 @@ SITES = [
 ]
 
 TARGET_KEYWORDS = [
-    "ascended heroes", "sv11a",
-    "pitch black", "sv11b",
+    "ascended heroes", "sv11a", "sv11b",
     "30th anniversary", "30th collection",
-    "mega forces", "mega evolution",
+    "mega forces",
 ]
 
 BLOCKED_KEYWORDS = [
@@ -166,7 +165,15 @@ def scrape_js(url, site):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
+
         page.goto(url, timeout=30000)
+        page.wait_for_timeout(3000)
+
+        # 🔥 scroll to force lazy-loaded products
+        for _ in range(3):
+            page.mouse.wheel(0, 2000)
+            page.wait_for_timeout(1000)
+
         html = page.content()
         browser.close()
 
@@ -187,7 +194,12 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
         if not href.startswith(allowed_prefix):
             continue
 
-        if "/product" in href or "/products/" in href or "/p/" in href:
+        # MUCH broader capture (critical fix)
+        if any(x in href for x in [
+            "/product", "/products", "/p/", "/c/",
+            "/collections", "/featured", "/category",
+            "/search", "/item"
+        ]):
             links.add(href)
 
     log("FOUND", f"{len(links)} product links", site)
@@ -223,7 +235,13 @@ def check_product_page(url, site):
     matches = [k for k in TARGET_KEYWORDS if k in combined]
     availability = [k for k in AVAILABILITY_KEYWORDS if k in combined]
 
-    booster_ok = "booster" in combined
+    booster_ok = any(x in combined for x in [
+        "booster",
+        "booster pack",
+        "booster box",
+        "tcg",
+        "trading card"
+    ])
 
     product_cache[url] = (matches, availability, booster_ok)
 
