@@ -1,0 +1,67 @@
+# =========================
+# VIRTUAL ENVIRONMENTS
+# =========================
+env/
+.venv/
+venv/
+ENV/
+pokemon/env/
+
+# =========================
+# PYTHON CACHE
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# =========================
+# STATE / RUNTIME FILES
+# (IMPORTANT for your bot)
+# =========================
+state.json
+*.log
+
+# =========================
+# PLAYWRIGHT / SELENIUM CACHE
+# =========================
+playwright/
+.ms-playwright/
+browser-data/
+chromium-profile/
+
+# =========================
+# OS FILES
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE / EDITORS
+# =========================
+.vscode/
+.idea/
+*.swp
+
+# =========================
+# ENV FILES (secrets)
+# =========================
+.env
+.env.*
+secrets.json
+
+# =========================
+# PYTEST / TOOLS
+# =========================
+.pytest_cache/
+.mypy_cache/
+
+# =========================
+# DISTRIBUTION / BUILD
+# =========================
+build/
+dist/
+*.egg-info/
+
+systemd/
+*.service

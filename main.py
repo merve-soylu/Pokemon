@@ -93,7 +93,7 @@ def save_state(state):
 def discord_ping_startup():
     requests.post(
         DISCORD_WEBHOOK,
-        json={"content": "🟢 Pokémon tracker ONLINE (REAL-TIME MODE)"},
+        json={"content": "🟢 Pokémon tracker ONLINE"},
         timeout=10
     )
 
@@ -122,7 +122,7 @@ def send_alert(site, url, targets, availability):
 
     requests.post(
         DISCORD_WEBHOOK,
-        json={"embeds": [embed]},
+        json={"content": "@everyone 🚨 NEW POKÉMON PRODUCT DETECTED", "embeds": [embed]},
         timeout=10
     )
 
@@ -166,7 +166,7 @@ def extract_product_links(soup, base_url, allowed_prefix):
     return links
 
 # =========================
-# PRODUCT CHECK
+# PRODUCT CHECK (BOOSTER FILTER ADDED)
 # =========================
 
 def check_product_page(url):
@@ -179,10 +179,13 @@ def check_product_page(url):
         matches = [k for k in TARGET_KEYWORDS if k in text]
         availability = [k for k in AVAILABILITY_KEYWORDS if k in text]
 
-        return matches, availability
+        # 🔥 NEW BOOSTER FILTER
+        booster_ok = "booster" in text
+
+        return matches, availability, booster_ok
 
     except:
-        return [], []
+        return [], [], False
 
 # =========================
 # ONE FULL SCAN CYCLE
@@ -213,11 +216,15 @@ def run_cycle(known_products):
                 if key in known_products:
                     continue
 
-                matches, availability = check_product_page(product_url)
+                matches, availability, booster_ok = check_product_page(product_url)
 
-                if matches:
+                # 🔥 ONLY ALERT IF:
+                # - Pokémon match exists
+                # - AND product contains "booster"
+                if matches and booster_ok:
+
                     send_alert(site["name"], product_url, matches, availability)
-                    print(f"[{datetime.now()}] DROP: {product_url}")
+                    print(f"[{datetime.now()}] BOOSTER DROP: {product_url}")
 
                 known_products.add(key)
                 updated = True
@@ -239,7 +246,7 @@ def main():
 
     discord_ping_startup()
 
-    print("🟢 Pokémon tracker running in real-time mode...")
+    print("🟢 Pokémon tracker running...")
 
     while True:
 
