@@ -4,8 +4,8 @@ from datetime import datetime
 import json
 import os
 import time
+import hashlib
 from urllib.parse import urljoin
-import os
 from dotenv import load_dotenv
 
 # =========================
@@ -21,43 +21,43 @@ POLL_INTERVAL = 30
 SITES = [
     {
         "name": "JB HiFi",
-        "url": "https://www.jbhifi.com.au",
+        "url": "https://www.jbhifi.com.au/collections/collectibles-merchandise/pokemon-trading-cards",
         "allowed_prefix": "https://www.jbhifi.com.au",
         "js": True
     },
     {
         "name": "EB Games",
-        "url": "https://www.ebgames.com.au",
+        "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "allowed_prefix": "https://www.ebgames.com.au",
         "js": True
     },
     {
         "name": "Pokemon Center",
-        "url": "https://www.pokemoncenter.com/en-au",
+        "url": "https://www.pokemoncenter.com/en-au/category/booster-packs",
         "allowed_prefix": "https://www.pokemoncenter.com/en-au",
         "js": False
     },
     {
         "name": "Kmart",
-        "url": "https://www.kmart.com.au",
+        "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
         "allowed_prefix": "https://www.kmart.com.au",
         "js": True
     },
     {
         "name": "Officeworks",
-        "url": "https://www.officeworks.com.au/",
+        "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
         "allowed_prefix": "https://www.officeworks.com.au/",
         "js": True
     },
     {
         "name": "Target",
-        "url": "https://www.target.com.au/",
+        "url": "https://www.target.com.au/c/toys/trading-card-games/pokemon-cards/W1852642",
         "allowed_prefix": "https://www.target.com.au/",
         "js": True
     },
     {
         "name": "Gameology",
-        "url": "https://www.gameology.com.au",
+        "url": "https://www.gameology.com.au/collections/pokemon",
         "allowed_prefix": "https://www.gameology.com.au",
         "js": False
     }
@@ -78,8 +78,21 @@ BLOCKED_KEYWORDS = [
 
 AVAILABILITY_KEYWORDS = [
     "pre-order", "preorder", "coming soon",
-    "add to cart", "add to bag", "add to basket", "in stock", "sold out", "wishlist"
+    "add to cart", "add to bag", "add to basket",
+    "in stock", "sold out", "wishlist"
 ]
+
+# =========================
+# LOGGING (ADDED)
+# =========================
+
+def log(level, msg, site=None):
+    now = datetime.now().strftime("%H:%M:%S")
+
+    if site:
+        print(f"[{now}] [{level}] [{site}] {msg}")
+    else:
+        print(f"[{now}] [{level}] {msg}")
 
 # =========================
 # STATE
@@ -145,11 +158,13 @@ def send_alert(site, url, targets, availability):
 # =========================
 
 def scrape_static(url):
+    log("SCRAPE", f"GET {url}")
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     r.raise_for_status()
     return r.text, BeautifulSoup(r.text, "html.parser")
 
 def scrape_js(url):
+    log("SCRAPE", f"JS GET {url}")
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -184,11 +199,13 @@ def is_blocked(text):
     return any(b in text for b in BLOCKED_KEYWORDS)
 
 # =========================
-# PRODUCT CHECK (IMPROVED BOOSTER LOGIC)
+# PRODUCT CHECK
 # =========================
 
 def check_product_page(url):
     try:
+        log("CHECK", url)
+
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
         r.raise_for_status()
 
@@ -203,30 +220,31 @@ def check_product_page(url):
 
         combined = f"{title} {headings} {body_text}"
 
-        # ❌ BLOCKED FILTER (NEW)
         if is_blocked(combined):
+            log("BLOCKED", url)
             return [], [], False
 
-        # keyword match
         matches = [k for k in TARGET_KEYWORDS if k in combined]
-
-        # STRICT BOOSTER FILTER
         booster_ok = "booster" in combined
 
         return matches, [], booster_ok
 
-    except:
+    except Exception as e:
+        log("ERROR", f"{url} -> {e}")
         return [], [], False
 
 # =========================
-# ONE SCAN CYCLE
+# MAIN LOOP
 # =========================
 
 def run_cycle(known_products):
 
     updated = False
+    log("SYSTEM", "Starting scan cycle")
 
     for site in SITES:
+
+        log("SITE", f"Scraping {site['name']}", site["name"])
 
         try:
             if site["js"]:
@@ -240,16 +258,18 @@ def run_cycle(known_products):
                 site["allowed_prefix"]
             )
 
+            log("FOUND", f"{len(new_links)} product links", site["name"])
+
             for product_url in new_links:
 
                 matches, _, booster_ok = check_product_page(product_url)
 
                 if not matches or not booster_ok:
+                    log("SKIP", product_url, site["name"])
                     continue
 
                 key = f"{site['name']}::{product_url}"
 
-                # scrape full product state each time
                 r = requests.get(product_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
                 soup = BeautifulSoup(r.text, "html.parser")
 
@@ -262,9 +282,8 @@ def run_cycle(known_products):
                 if key not in known_products:
                     known_products[key] = new_hash
 
+                    log("NEW", product_url, site["name"])
                     send_alert(site["name"], product_url, matches, [])
-                    print(f"[NEW] {product_url}")
-
                     updated = True
                     continue
 
@@ -273,19 +292,20 @@ def run_cycle(known_products):
                 if old_hash != new_hash:
                     known_products[key] = new_hash
 
+                    log("UPDATE", product_url, site["name"])
                     send_alert(site["name"], product_url, matches, [])
-                    print(f"[UPDATED] {product_url}")
-
                     updated = True
 
         except Exception as e:
             send_crash(f"{site['name']} error: {e}")
+            log("CRASH", f"{site['name']} -> {e}")
 
     if updated:
         save_state(known_products)
+        log("STATE", f"Saved ({len(known_products)} products)")
 
 # =========================
-# MAIN LOOP
+# MAIN
 # =========================
 
 def main():
@@ -294,7 +314,8 @@ def main():
 
     discord_ping_startup()
 
-    print("🟢 Pokémon tracker running...")
+    log("SYSTEM", "🟢 Pokémon tracker running")
+
     while True:
 
         start = time.time()
@@ -304,13 +325,10 @@ def main():
 
         except Exception as e:
             send_crash(str(e))
+            log("FATAL", str(e))
 
         elapsed = time.time() - start
         time.sleep(max(5, POLL_INTERVAL - elapsed))
-
-# =========================
-# START
-# =========================
 
 if __name__ == "__main__":
     main()
