@@ -3,13 +3,13 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import json
 import os
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit, urljoin
 
 # =========================
 # CONFIG
 # =========================
 
-DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1519121141862760628/3yxReFPKTxZ4xhMmhSRGQsJaVdab0n8yKsV3l1DVdvryH6GrTnLUCfzYXedh4nLFJiph"
+DISCORD_WEBHOOK = "YOUR_WEBHOOK_HERE"
 STATE_FILE = "state.json"
 
 SITES = [
@@ -32,6 +32,16 @@ SITES = [
         "name": "EB Games",
         "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "js": True
+    },
+    {
+        "name": "Kmart",
+        "url": "https://www.kmart.com.au/category/toys/pokemon/",
+        "js": True
+    },
+    {
+        "name": "Officeworks",
+        "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
+        "js": True
     }
 ]
 
@@ -39,26 +49,24 @@ TARGET_KEYWORDS = [
     "ascended heroes", "sv11a",
     "pitch black", "sv11b",
     "30th anniversary", "30th collection",
-    "mega forces", "mega evolution"
+    "mega forces", "pitch-black",
+    "ascended-heroes"
 ]
 
+# Only used AFTER product page is detected
 AVAILABILITY_KEYWORDS = [
     "pre-order", "preorder",
     "available now", "coming soon",
-    "notify me", "add to cart",
-    "buy now", "in stock",
-    "order now", "reserve now"
-]
-
-URL_KEYWORDS = [
-    "ascended", "heroes",
-    "pitch", "black",
-    "anniversary", "30th",
-    "mega", "forces"
+    "notify me",
+    "add to cart",
+    "buy now",
+    "in stock",
+    "order now",
+    "reserve now"
 ]
 
 # =========================
-# STATE
+# STATE (TRACK ALL PRODUCTS)
 # =========================
 
 def load_state():
@@ -78,19 +86,19 @@ def save_state(state):
 def discord_ping_startup():
     requests.post(
         DISCORD_WEBHOOK,
-        json={"content": "✅ Raspberry Pi Pokémon monitor is ONLINE"},
+        json={"content": "✅ Pokémon Product Tracker ONLINE (Delta Mode)"},
         timeout=10
     )
 
 def send_alert(site, url, targets, availability):
     embed = {
-        "title": "🚨 Pokémon Drop Signal",
-        "description": f"**{site}** detected activity",
+        "title": "🚨 NEW POKÉMON PRODUCT DETECTED",
+        "description": f"**{site}** new product listing found",
         "color": 16711680,
         "fields": [
-            {"name": "URL", "value": url[:1024]},
-            {"name": "Targets", "value": ", ".join(targets) or "None"},
-            {"name": "Status", "value": ", ".join(availability) or "None"},
+            {"name": "Product URL", "value": url[:1024]},
+            {"name": "Matches", "value": ", ".join(targets) or "None"},
+            {"name": "Status Signals", "value": ", ".join(availability) or "None"},
             {"name": "Time", "value": str(datetime.now())}
         ]
     }
@@ -102,33 +110,13 @@ def send_alert(site, url, targets, availability):
     )
 
 # =========================
-# URL NORMALISER
-# =========================
-
-def normalize(url):
-    p = urlsplit(url)
-    return urlunsplit((p.scheme, p.netloc, p.path.rstrip("/"), "", ""))
-
-# =========================
-# SCRAPER (STATIC)
+# SCRAPERS
 # =========================
 
 def scrape_static(url):
-    r = requests.get(
-        url,
-        headers={"User-Agent": "Mozilla/5.0"},
-        timeout=20
-    )
+    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     r.raise_for_status()
-
-    html = r.text
-    soup = BeautifulSoup(html, "html.parser")
-
-    return html.lower(), soup
-
-# =========================
-# SCRAPER (JS SITES)
-# =========================
+    return r.text, BeautifulSoup(r.text, "html.parser")
 
 def scrape_js(url):
     from playwright.sync_api import sync_playwright
@@ -137,80 +125,101 @@ def scrape_js(url):
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(url, timeout=30000)
-        content = page.content()
+        html = page.content()
         browser.close()
 
-    return content.lower(), BeautifulSoup(content, "html.parser")
+    return html, BeautifulSoup(html, "html.parser")
 
 # =========================
-# CHECK SITE
+# PRODUCT LINK EXTRACTION (CORE FIX)
 # =========================
 
-def check_site(site):
+def extract_product_links(soup, base_url):
+    links = set()
+
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+
+        full_url = urljoin(base_url, href)
+
+        # STRICT FILTER: only real product pages
+        if "/product" in full_url or "/products/" in full_url:
+            links.add(full_url.split("?")[0].rstrip("/"))
+
+    return links
+
+# =========================
+# PRODUCT CHECK
+# =========================
+
+def check_product_page(url):
     try:
-        if site["js"]:
-            text, soup = scrape_js(site["url"])
-        else:
-            text, soup = scrape_static(site["url"])
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        r.raise_for_status()
 
-        targets = [k for k in TARGET_KEYWORDS if k in text]
+        text = r.text.lower()
+
+        matches = [k for k in TARGET_KEYWORDS if k in text]
         availability = [k for k in AVAILABILITY_KEYWORDS if k in text]
 
-        urls = []
-        for a in soup.find_all("a", href=True):
-            href = a["href"].lower()
-            if any(k in href for k in URL_KEYWORDS):
-                urls.append(a["href"])
+        return matches, availability
 
-        return {
-            "targets": list(set(targets)),
-            "availability": list(set(availability)),
-            "urls": list(set(urls))
-        }
-
-    except Exception as e:
-        print(f"{site['name']} error: {e}")
-        return None
+    except:
+        return [], []
 
 # =========================
-# MAIN
+# MAIN LOGIC
 # =========================
 
 def main():
 
-    known = load_state()
+    known_products = load_state()
     updated = False
 
     for site in SITES:
 
-        result = check_site(site)
-        if not result:
-            continue
+        try:
+            if site["js"]:
+                html, soup = scrape_js(site["url"])
+            else:
+                html, soup = scrape_static(site["url"])
 
-        for url in result["urls"]:
+            new_product_links = extract_product_links(soup, site["url"])
 
-            key = f"{site['name']}::{normalize(url)}"
+            for product_url in new_product_links:
 
-            if key in known:
-                continue
+                key = f"{site['name']}::{product_url}"
 
-            send_alert(
-                site["name"],
-                url,
-                result["targets"],
-                result["availability"]
-            )
+                # ONLY NEW PRODUCTS
+                if key in known_products:
+                    continue
 
-            known.add(key)
-            updated = True
+                # Now inspect product page
+                targets, availability = check_product_page(product_url)
 
-            print(f"[{datetime.now()}] ALERT: {site['name']} -> {url}")
+                # Only alert if relevant Pokémon set exists
+                if targets:
+
+                    send_alert(
+                        site["name"],
+                        product_url,
+                        targets,
+                        availability
+                    )
+
+                    print(f"[{datetime.now()}] NEW DROP: {product_url}")
+
+                known_products.add(key)
+                updated = True
+
+        except Exception as e:
+            print(f"{site['name']} error: {e}")
 
     if updated:
-        save_state(known)
+        save_state(known_products)
 
 # =========================
-# STARTUP BEHAVIOUR
+# STARTUP
 # =========================
 
 if __name__ == "__main__":
