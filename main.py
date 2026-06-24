@@ -109,8 +109,8 @@ def send_crash(message):
 
 def send_alert(site, url, targets, availability):
     embed = {
-        "title": "🚨 NEW POKÉMON PRODUCT DETECTED",
-        "description": f"**{site}** new Pokémon product found",
+        "title": "🚨 NEW POKéMON PRODUCT DETECTED",
+        "description": f"**{site}** Pokémon booster product found",
         "color": 16711680,
         "fields": [
             {"name": "Product URL", "value": url[:1024]},
@@ -122,7 +122,7 @@ def send_alert(site, url, targets, availability):
 
     requests.post(
         DISCORD_WEBHOOK,
-        json={"content": "@everyone 🚨 NEW POKÉMON PRODUCT DETECTED", "embeds": [embed]},
+        json={"content": "@everyone 🚨 BOOSTER DROP DETECTED", "embeds": [embed]},
         timeout=10
     )
 
@@ -166,7 +166,7 @@ def extract_product_links(soup, base_url, allowed_prefix):
     return links
 
 # =========================
-# PRODUCT CHECK (BOOSTER FILTER ADDED)
+# PRODUCT CHECK (IMPROVED BOOSTER LOGIC)
 # =========================
 
 def check_product_page(url):
@@ -174,13 +174,21 @@ def check_product_page(url):
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
         r.raise_for_status()
 
-        text = r.text.lower()
+        soup = BeautifulSoup(r.text, "html.parser")
 
-        matches = [k for k in TARGET_KEYWORDS if k in text]
-        availability = [k for k in AVAILABILITY_KEYWORDS if k in text]
+        # Clean text sources (reduces noise)
+        title = soup.title.get_text(" ", strip=True).lower() if soup.title else ""
+        headings = " ".join(h.get_text(" ", strip=True).lower() for h in soup.find_all(["h1", "h2"]))
+        body_text = soup.get_text(" ", strip=True).lower()
 
-        # 🔥 NEW BOOSTER FILTER
-        booster_ok = "booster" in text
+        combined = f"{title} {headings} {body_text}"
+
+        # keyword match
+        matches = [k for k in TARGET_KEYWORDS if k in combined]
+        availability = [k for k in AVAILABILITY_KEYWORDS if k in combined]
+
+        # STRICT BOOSTER FILTER
+        booster_ok = "booster" in title or "booster" in headings
 
         return matches, availability, booster_ok
 
@@ -188,7 +196,7 @@ def check_product_page(url):
         return [], [], False
 
 # =========================
-# ONE FULL SCAN CYCLE
+# ONE SCAN CYCLE
 # =========================
 
 def run_cycle(known_products):
@@ -218,9 +226,9 @@ def run_cycle(known_products):
 
                 matches, availability, booster_ok = check_product_page(product_url)
 
-                # 🔥 ONLY ALERT IF:
-                # - Pokémon match exists
-                # - AND product contains "booster"
+                # FINAL FILTER LOGIC:
+                # - must match Pokémon set
+                # - must be booster product
                 if matches and booster_ok:
 
                     send_alert(site["name"], product_url, matches, availability)
@@ -237,7 +245,7 @@ def run_cycle(known_products):
         save_state(known_products)
 
 # =========================
-# MAIN LOOP (REAL TIME)
+# MAIN LOOP
 # =========================
 
 def main():
@@ -247,7 +255,6 @@ def main():
     discord_ping_startup()
 
     print("🟢 Pokémon tracker running...")
-
     while True:
 
         start = time.time()
@@ -259,9 +266,7 @@ def main():
             send_crash(str(e))
 
         elapsed = time.time() - start
-        sleep_time = max(5, POLL_INTERVAL - elapsed)
-
-        time.sleep(sleep_time)
+        time.sleep(max(5, POLL_INTERVAL - elapsed))
 
 # =========================
 # START
