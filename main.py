@@ -65,13 +65,15 @@ TARGET_KEYWORDS = [
 ]
 
 AVAILABILITY_KEYWORDS = [
-    "pre-order", "preorder",
+    "pre-order", "preorder", "pre order",
     "available now", "coming soon",
     "notify me",
     "add to cart",
+    "add to basket",
     "buy now",
     "in stock",
     "order now",
+    "add to bag",
     "reserve now"
 ]
 
