@@ -76,13 +76,27 @@ BLOCKED_KEYWORDS = [
 def load_state():
     if os.path.exists(STATE_FILE):
         try:
-            return json.load(open(STATE_FILE, "r"))
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+
+            # force cleanup: ensure all values are simple
+            cleaned = {}
+            for k, v in data.items():
+                if isinstance(k, str):
+                    cleaned[k] = True
+            return cleaned
+
         except:
             return {}
+
     return {}
 
 def save_state(state):
-    json.dump(state, open(STATE_FILE, "w"), indent=2)
+    # force JSON-safe dict
+    safe_state = {str(k): True for k in state.keys()}
+
+    with open(STATE_FILE, "w") as f:
+        json.dump(safe_state, f, indent=2)
 
 # =========================
 # DISCORD
