@@ -1,6 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
 from datetime import datetime
 import json
 import os
@@ -18,57 +17,28 @@ DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
 STATE_FILE = "state.json"
 POLL_INTERVAL = 30
-HEARTBEAT_INTERVAL = 3600
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+# =========================
+# LOGGING
+# =========================
+
+def log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
 # =========================
 # SITES
 # =========================
 
 SITES = [
-    {
-        "name": "JB HiFi",
-        "url": "https://www.jbhifi.com.au",
-        "allowed_prefix": "https://www.jbhifi.com.au",
-        "js": True
-    },
-    {
-        "name": "EB Games",
-        "url": "https://www.ebgames.com.au",
-        "allowed_prefix": "https://www.ebgames.com.au",
-        "js": True
-    },
-    {
-        "name": "Pokemon Center",
-        "url": "https://www.pokemoncenter.com/en-au",
-        "allowed_prefix": "https://www.pokemoncenter.com/en-au",
-        "js": False
-    },
-    {
-        "name": "Kmart",
-        "url": "https://www.kmart.com.au",
-        "allowed_prefix": "https://www.kmart.com.au",
-        "js": True
-    },
-    {
-        "name": "Officeworks",
-        "url": "https://www.officeworks.com.au/",
-        "allowed_prefix": "https://www.officeworks.com.au/",
-        "js": True
-    },
-    {
-        "name": "Target",
-        "url": "https://www.target.com.au/",
-        "allowed_prefix": "https://www.target.com.au/",
-        "js": True
-    },
-    {
-        "name": "Gameology",
-        "url": "https://www.gameology.com.au",
-        "allowed_prefix": "https://www.gameology.com.au",
-        "js": False
-    }
+    {"name": "JB HiFi", "url": "https://www.jbhifi.com.au", "prefix": "https://www.jbhifi.com.au"},
+    {"name": "EB Games", "url": "https://www.ebgames.com.au", "prefix": "https://www.ebgames.com.au"},
+    {"name": "Pokemon Center", "url": "https://www.pokemoncenter.com/en-au", "prefix": "https://www.pokemoncenter.com/en-au"},
+    {"name": "Kmart", "url": "https://www.kmart.com.au", "prefix": "https://www.kmart.com.au"},
+    {"name": "Officeworks", "url": "https://www.officeworks.com.au/", "prefix": "https://www.officeworks.com.au/"},
+    {"name": "Target", "url": "https://www.target.com.au/", "prefix": "https://www.target.com.au/"},
+    {"name": "Gameology", "url": "https://www.gameology.com.au", "prefix": "https://www.gameology.com.au"},
 ]
 
 # =========================
@@ -80,7 +50,8 @@ TARGET_KEYWORDS = [
     "ascended heroes",
     "30th anniversary",
     "30th collection",
-    "mega forces"
+    "mega forces",
+    "booster"
 ]
 
 BLOCKED_KEYWORDS = [
@@ -88,150 +59,119 @@ BLOCKED_KEYWORDS = [
     "deck box", "album", "case", "book"
 ]
 
-ALERT_KEYWORDS = [
-    "pre-order", "preorder", "coming soon",
-    "add to cart", "add to bag", "add to basket", "in stock", "sold out", "wishlist"
-]
-
-# =========================
-# LOGGING
-# =========================
-
-def log(msg):
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
-
 # =========================
 # STATE
 # =========================
 
 def load_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
+    if not os.path.exists(STATE_FILE):
+        return {}
+
+    try:
+        with open(STATE_FILE, "r") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except:
+        return {}
 
 def save_state(state):
-    tmp = STATE_FILE + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(state, f, indent=2)
-    os.replace(tmp, STATE_FILE)
-
-# =========================
-# HASH
-# =========================
-
-def make_hash(text):
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-# =========================
-# SCRAPING (FIXED JS SUPPORT)
-# =========================
-
-def scrape(url, js=False):
     try:
-        if not js:
-            r = requests.get(url, headers=HEADERS, timeout=20)
-            r.raise_for_status()
-            return r.text, BeautifulSoup(r.text, "html.parser")
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
-            page = browser.new_page()
-            page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(2500)
-            html = page.content()
-            browser.close()
-            return html, BeautifulSoup(html, "html.parser")
-
+        with open(STATE_FILE, "w") as f:
+            json.dump(state, f, indent=2)
     except Exception as e:
-        log(f"❌ scrape error {url}: {e}")
-        return "", BeautifulSoup("", "html.parser")
-
-# =========================
-# LINKS
-# =========================
-
-def extract_product_links(soup, base_url, allowed_prefix):
-    links = set()
-
-    for a in soup.find_all("a", href=True):
-        href = urljoin(base_url, a["href"]).split("?")[0]
-
-        if not href.startswith(allowed_prefix):
-            continue
-
-        if "/product" in href or "/products/" in href or "/p/" in href:
-            links.add(href)
-
-    return links
-
-# =========================
-# ANALYSIS
-# =========================
-
-def analyze_product(text):
-    text = text.lower()
-
-    if any(b in text for b in BLOCKED_KEYWORDS):
-        return None
-
-    if not any(k in text for k in TARGET_KEYWORDS):
-        return None
-
-    if "pokemon" not in text and "tcg" not in text:
-        return None
-
-    return next((s for s in ALERT_KEYWORDS if s in text), "unknown")
-
-# =========================
-# PRODUCT FETCH
-# =========================
-
-def get_product_state(url, js=False):
-    html, soup = scrape(url, js)
-
-    if not html:
-        return None
-
-    title = soup.title.get_text(" ", strip=True) if soup.title else ""
-    body = soup.get_text(" ", strip=True)
-
-    combined = f"{title}\n{body}".lower()
-
-    return {
-        "title": title,
-        "hash": make_hash(combined),
-        "raw": combined
-    }
+        log(f"❌ state save failed: {e}")
 
 # =========================
 # DISCORD
 # =========================
 
-def send_alert(site, url, title, status, change_type):
-    log(f"🚨 {change_type} | {title}")
+def send_discord(title, url, site, event_type):
+    if not DISCORD_WEBHOOK:
+        log("⚠️ Missing Discord webhook")
+        return
 
-    requests.post(
-        DISCORD_WEBHOOK,
-        json={
-            "content": f"🚨 {change_type} @everyone",
-            "embeds": [{
-                "title": "Pokémon Early Drop Radar",
-                "description": f"**{site}**",
+    msg = {
+        "content": f"🚨 @everyone {event_type}",
+        "embeds": [
+            {
+                "title": title[:256],
+                "description": f"**Site:** {site}\n**Event:** {event_type}",
+                "url": url,
                 "color": 16711680,
                 "fields": [
-                    {"name": "Product", "value": title[:1024]},
-                    {"name": "Status", "value": status},
-                    {"name": "URL", "value": url[:1024]},
+                    {"name": "Link", "value": url},
                     {"name": "Time", "value": str(datetime.now())}
                 ]
-            }]
-        },
-        timeout=10
-    )
+            }
+        ]
+    }
+
+    try:
+        requests.post(DISCORD_WEBHOOK, json=msg, timeout=10)
+    except:
+        log("⚠️ Discord failed")
+
+# =========================
+# SCRAPER
+# =========================
+
+def scrape(url):
+    r = requests.get(url, headers=HEADERS, timeout=20)
+    r.raise_for_status()
+    return BeautifulSoup(r.text, "html.parser")
+
+# =========================
+# LINK EXTRACTION
+# =========================
+
+def extract_links(soup, base, prefix):
+    links = set()
+
+    for a in soup.find_all("a", href=True):
+        href = urljoin(base, a["href"]).split("?")[0]
+
+        if href.startswith(prefix) and ("/product" in href or "/p/" in href):
+            links.add(href)
+
+    return links
+
+# =========================
+# PRODUCT ANALYSIS
+# =========================
+
+def is_relevant(text):
+    text = text.lower()
+
+    if any(b in text for b in BLOCKED_KEYWORDS):
+        return False
+
+    if not any(k in text for k in TARGET_KEYWORDS):
+        return False
+
+    return True
+
+# =========================
+# PRODUCT CHECK
+# =========================
+
+def check_product(url):
+    try:
+        soup = scrape(url)
+
+        title = soup.title.get_text(" ", strip=True) if soup.title else ""
+        body = soup.get_text(" ", strip=True)
+
+        combined = f"{title} {body}".lower()
+
+        return {
+            "title": title,
+            "hash": hashlib.sha256(combined.encode()).hexdigest(),
+            "text": combined
+        }
+
+    except Exception as e:
+        log(f"❌ product error {url}: {e}")
+        return None
 
 # =========================
 # MAIN LOOP
@@ -240,55 +180,61 @@ def send_alert(site, url, title, status, change_type):
 def run(state):
 
     for site in SITES:
-
         log(f"🔎 scanning {site['name']}")
 
-        html, soup = scrape(site["url"], js=site["js"])
+        try:
+            soup = scrape(site["url"])
+            links = extract_links(soup, site["url"], site["prefix"])
 
-        links = extract_product_links(
-            soup,
-            site["url"],
-            site["allowed_prefix"]
-        )
+            log(f"   ↳ {len(links)} product links")
 
-        log(f"   ↳ found {len(links)} links")
+            for url in links:
 
-        for url in links:
+                product = check_product(url)
+                if not product:
+                    continue
 
-            product = get_product_state(url, js=site["js"])
-            if not product:
-                continue
+                title = product["title"]
+                new_hash = product["hash"]
+                text = product["text"]
 
-            title = product["title"]
-            new_hash = product["hash"]
-            raw = product["raw"]
+                relevant = is_relevant(text)
 
-            if url not in state:
-                state[url] = {
-                    "hash": new_hash,
-                    "first_seen": str(datetime.now()),
-                    "last_seen": str(datetime.now())
-                }
+                # =====================
+                # NEW PRODUCT
+                # =====================
+                if url not in state:
+                    state[url] = {
+                        "hash": new_hash,
+                        "first_seen": str(datetime.now())
+                    }
 
-                log(f"🆕 DISCOVERED: {title}")
+                    log(f"🆕 NEW: {title}")
 
-                status = analyze_product(raw)
-                if status:
-                    send_alert(site["name"], url, title, status, "NEW PRODUCT")
+                    if relevant:
+                        send_discord(title, url, site["name"], "NEW PRODUCT")
 
-                continue
+                    continue
 
-            old_hash = state[url]["hash"]
+                old_hash = state[url]["hash"]
 
-            if old_hash != new_hash:
-                log(f"⚡ CHANGE DETECTED: {title}")
+                # =====================
+                # CHANGED PRODUCT
+                # =====================
+                if old_hash != new_hash:
+                    log(f"⚡ UPDATED: {title}")
 
-                status = analyze_product(raw)
-                if status:
-                    send_alert(site["name"], url, title, status, "PAGE UPDATED")
+                    if relevant:
+                        send_discord(title, url, site["name"], "UPDATED PRODUCT")
 
-            state[url]["hash"] = new_hash
-            state[url]["last_seen"] = str(datetime.now())
+                # =====================
+                # UPDATE STATE
+                # =====================
+                state[url]["hash"] = new_hash
+                state[url]["last_seen"] = str(datetime.now())
+
+        except Exception as e:
+            log(f"❌ site error {site['name']}: {e}")
 
 # =========================
 # START
@@ -298,13 +244,16 @@ def main():
 
     state = load_state()
 
-    log("🟢 Early Drop Radar Online (FIXED)")
+    log("🟢 Tracker ONLINE")
+    send_discord("Tracker Started", "N/A", "SYSTEM", "STARTUP")
 
     while True:
         start = time.time()
 
         run(state)
         save_state(state)
+
+        log(f"💾 state saved ({len(state)} products tracked)")
 
         time.sleep(max(5, POLL_INTERVAL - (time.time() - start)))
 
