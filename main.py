@@ -223,5 +223,22 @@ def main():
 # =========================
 
 if __name__ == "__main__":
-    discord_ping_startup()
-    main()
+
+    try: 
+        discord_ping_startup()
+        main()
+
+    except Exception as e:
+        # 🚨 BOT CRASH NOTIFICATION
+        try:
+            requests.post(
+                DISCORD_WEBHOOK,
+                json={
+                    "content": f"❌ Pokémon monitor CRASHED:\n```{str(e)}```"
+                },
+                timeout=10
+            )
+        except:
+            pass
+
+        raise
