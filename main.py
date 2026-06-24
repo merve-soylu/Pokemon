@@ -189,7 +189,16 @@ def extract_product_links(soup, base_url, allowed_prefix):
         if not href.startswith(allowed_prefix):
             continue
 
-        if "/product" in href or "/products/" in href or "/p/" in href:
+        # BROADER product detection (IMPORTANT FIX)
+        if any(x in href for x in [
+            "/product",
+            "/products",
+            "/p/",
+            "/c/",
+            "/collections/",
+            "/featured",
+            "/category"
+        ]):
             links.add(href)
 
     return links
