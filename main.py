@@ -1,9 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 from datetime import datetime
 import json
 import os
 import time
+import hashlib
 from urllib.parse import urljoin
 from dotenv import load_dotenv
 
@@ -18,49 +20,55 @@ STATE_FILE = "state.json"
 POLL_INTERVAL = 30
 HEARTBEAT_INTERVAL = 3600
 
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+# =========================
+# SITES
+# =========================
+
 SITES = [
     {
-        "name": "Pokemon Center",
-        "url": "https://www.pokemoncenter.com/en-au/category/tcg-cards",
-        "allowed_prefix": "https://www.pokemoncenter.com/en-au",
-        "js": False
-    },
-    {
-        "name": "Gameology",
-        "url": "https://www.gameology.com.au/collections/pokemon",
-        "allowed_prefix": "https://www.gameology.com.au",
-        "js": True
-    },
-    {
         "name": "JB HiFi",
-        "url": "https://www.jbhifi.com.au/collections/collectibles-merchandise/pokemon-trading-cards",
+        "url": "https://www.jbhifi.com.au",
         "allowed_prefix": "https://www.jbhifi.com.au",
         "js": True
     },
     {
         "name": "EB Games",
-        "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
+        "url": "https://www.ebgames.com.au",
         "allowed_prefix": "https://www.ebgames.com.au",
         "js": True
     },
     {
+        "name": "Pokemon Center",
+        "url": "https://www.pokemoncenter.com/en-au",
+        "allowed_prefix": "https://www.pokemoncenter.com/en-au",
+        "js": False
+    },
+    {
         "name": "Kmart",
-        "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
+        "url": "https://www.kmart.com.au",
         "allowed_prefix": "https://www.kmart.com.au",
         "js": True
     },
     {
         "name": "Officeworks",
-        "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
-        "allowed_prefix": "https://www.officeworks.com.au",
+        "url": "https://www.officeworks.com.au/",
+        "allowed_prefix": "https://www.officeworks.com.au/",
         "js": True
     },
     {
         "name": "Target",
-        "url": "https://www.target.com.au/c/toys/trading-card-games/pokemon-cards/W1852642",
-        "allowed_prefix": "https://www.target.com.au",
+        "url": "https://www.target.com.au/",
+        "allowed_prefix": "https://www.target.com.au/",
         "js": True
     },
+    {
+        "name": "Gameology",
+        "url": "https://www.gameology.com.au",
+        "allowed_prefix": "https://www.gameology.com.au",
+        "js": False
+    }
 ]
 
 # =========================
@@ -68,26 +76,29 @@ SITES = [
 # =========================
 
 TARGET_KEYWORDS = [
+    "sv11a", "sv11b",
     "ascended heroes",
-    "sv11a",
-    "sv11b",
     "30th anniversary",
     "30th collection",
     "mega forces"
 ]
 
-ALERT_STATUSES = [
-    "pre-order", "preorder", "pre order",
-    "add to cart", "add to bag", "add to basket",
-    "buy now", "in stock",
-    "order now", "reserve now"
+BLOCKED_KEYWORDS = [
+    "binder", "sleeves", "playmat",
+    "deck box", "album", "case", "book"
 ]
 
-BLOCKED_KEYWORDS = [
-    "book", "binder", "portfolio", "album",
-    "sleeves", "playmat", "deck box",
-    "storage", "accessory", "case"
+ALERT_KEYWORDS = [
+    "pre-order", "preorder", "coming soon",
+    "add to cart", "add to bag", "add to basket", "in stock", "sold out", "wishlist"
 ]
+
+# =========================
+# LOGGING
+# =========================
+
+def log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
 # =========================
 # STATE
@@ -103,58 +114,29 @@ def load_state():
     return {}
 
 def save_state(state):
-    with open(STATE_FILE, "w") as f:
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
+    os.replace(tmp, STATE_FILE)
 
 # =========================
-# DISCORD
+# HASH
 # =========================
 
-def discord_ping_startup():
-    requests.post(DISCORD_WEBHOOK, json={"content": "🟢 Pokémon BOOSTER tracker ONLINE"}, timeout=10)
+def make_hash(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-def send_heartbeat():
-    requests.post(DISCORD_WEBHOOK, json={"content": "🟢 Tracker heartbeat - still running"}, timeout=10)
+# =========================
+# SCRAPING (FIXED JS SUPPORT)
+# =========================
 
-def send_crash(msg):
+def scrape(url, js=False):
     try:
-        requests.post(DISCORD_WEBHOOK, json={"content": f"❌ TRACKER CRASH:\n```{msg}```"}, timeout=10)
-    except:
-        pass
+        if not js:
+            r = requests.get(url, headers=HEADERS, timeout=20)
+            r.raise_for_status()
+            return r.text, BeautifulSoup(r.text, "html.parser")
 
-def send_alert(site, url, matches, status, change_type):
-    requests.post(
-        DISCORD_WEBHOOK,
-        json={
-            "content": f"🚨 {change_type} DETECTED @everyone",
-            "embeds": [{
-                "title": "Pokémon Booster Alert",
-                "description": f"**{site}**",
-                "color": 16711680,
-                "fields": [
-                    {"name": "URL", "value": url[:1024]},
-                    {"name": "Sets", "value": ", ".join(matches)},
-                    {"name": "Status", "value": status},
-                    {"name": "Time", "value": str(datetime.now())}
-                ]
-            }]
-        },
-        timeout=10
-    )
-
-# =========================
-# SCRAPERS
-# =========================
-
-def scrape_static(url):
-    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    r.raise_for_status()
-    return r.text, BeautifulSoup(r.text, "html.parser")
-
-def scrape_js(url):
-    from playwright.sync_api import sync_playwright
-
-    try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
             page = browser.new_page()
@@ -165,11 +147,11 @@ def scrape_js(url):
             return html, BeautifulSoup(html, "html.parser")
 
     except Exception as e:
-        print(f"[PLAYWRIGHT ERROR] {url}: {e}")
+        log(f"❌ scrape error {url}: {e}")
         return "", BeautifulSoup("", "html.parser")
 
 # =========================
-# LINK EXTRACTION
+# LINKS
 # =========================
 
 def extract_product_links(soup, base_url, allowed_prefix):
@@ -181,145 +163,150 @@ def extract_product_links(soup, base_url, allowed_prefix):
         if not href.startswith(allowed_prefix):
             continue
 
-        if any(x in href for x in ["/product", "/products/", "/p/"]):
+        if "/product" in href or "/products/" in href or "/p/" in href:
             links.add(href)
 
     return links
 
 # =========================
-# PRODUCT VALIDATION (FIXED CORE LOGIC)
+# ANALYSIS
 # =========================
 
-def check_product_page(url):
-    try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-        r.raise_for_status()
+def analyze_product(text):
+    text = text.lower()
 
-        soup = BeautifulSoup(r.text, "html.parser")
+    if any(b in text for b in BLOCKED_KEYWORDS):
+        return None
 
-        title = soup.title.get_text(" ", strip=True).lower() if soup.title else ""
-        h1 = soup.find("h1")
-        h1_text = h1.get_text(" ", strip=True).lower() if h1 else ""
-        body = soup.get_text(" ", strip=True).lower()
+    if not any(k in text for k in TARGET_KEYWORDS):
+        return None
 
-        combined = f"{title} {h1_text} {body}"
+    if "pokemon" not in text and "tcg" not in text:
+        return None
 
-        # MUST be Pokémon-related
-        pokemon_ok = any(x in combined for x in ["pokemon", "pokémon", "tcg"])
-
-        # MUST be booster-related (strict filter)
-        booster_ok = "booster" in combined
-
-        if not pokemon_ok or not booster_ok:
-            return None, None
-
-        # BLOCK unwanted categories BEFORE state
-        if any(b in combined for b in BLOCKED_KEYWORDS):
-            return None, None
-
-        # must match at least one target set
-        matches = [k for k in TARGET_KEYWORDS if k in combined]
-        if not matches:
-            return None, None
-
-        # status detection
-        status_hits = [k for k in ALERT_STATUSES if k in combined]
-        status = status_hits[0] if status_hits else "unknown"
-
-        return matches, status
-
-    except:
-        return None, None
+    return next((s for s in ALERT_KEYWORDS if s in text), "unknown")
 
 # =========================
-# MAIN CYCLE (FIXED STATE LOGIC)
+# PRODUCT FETCH
 # =========================
 
-def run_cycle(state):
+def get_product_state(url, js=False):
+    html, soup = scrape(url, js)
 
-    for site in SITES:
+    if not html:
+        return None
 
-        try:
-            if site["js"]:
-                html, soup = scrape_js(site["url"])
-            else:
-                html, soup = scrape_static(site["url"])
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    body = soup.get_text(" ", strip=True)
 
-            if not html:
-                continue
+    combined = f"{title}\n{body}".lower()
 
-            links = extract_product_links(
-                soup,
-                site["url"],
-                site["allowed_prefix"]
-            )
+    return {
+        "title": title,
+        "hash": make_hash(combined),
+        "raw": combined
+    }
 
-            for url in links:
+# =========================
+# DISCORD
+# =========================
 
-                # STEP 1: validate BEFORE touching state
-                matches, status = check_product_page(url)
+def send_alert(site, url, title, status, change_type):
+    log(f"🚨 {change_type} | {title}")
 
-                # ❌ DO NOT STORE INVALID PRODUCTS
-                if not matches:
-                    continue
-
-                # STEP 2: initialize state only for valid products
-                if url not in state:
-                    state[url] = {
-                        "status": None,
-                        "first_seen": str(datetime.now())
-                    }
-
-                old_status = state[url]["status"]
-
-                # NEW PRODUCT (first time ever seen valid booster product)
-                if old_status is None and status != "unknown":
-                    send_alert(site["name"], url, matches, status, "NEW PRODUCT")
-
-                # STATUS CHANGE (only meaningful transitions)
-                elif old_status != status and status != "unknown":
-                    send_alert(site["name"], url, matches, status, "STATUS CHANGE")
-
-                # STEP 3: update state ONLY for valid products
-                state[url]["status"] = status
-                state[url]["last_seen"] = str(datetime.now())
-
-        except Exception as e:
-            send_crash(f"{site['name']}: {e}")
+    requests.post(
+        DISCORD_WEBHOOK,
+        json={
+            "content": f"🚨 {change_type} @everyone",
+            "embeds": [{
+                "title": "Pokémon Early Drop Radar",
+                "description": f"**{site}**",
+                "color": 16711680,
+                "fields": [
+                    {"name": "Product", "value": title[:1024]},
+                    {"name": "Status", "value": status},
+                    {"name": "URL", "value": url[:1024]},
+                    {"name": "Time", "value": str(datetime.now())}
+                ]
+            }]
+        },
+        timeout=10
+    )
 
 # =========================
 # MAIN LOOP
+# =========================
+
+def run(state):
+
+    for site in SITES:
+
+        log(f"🔎 scanning {site['name']}")
+
+        html, soup = scrape(site["url"], js=site["js"])
+
+        links = extract_product_links(
+            soup,
+            site["url"],
+            site["allowed_prefix"]
+        )
+
+        log(f"   ↳ found {len(links)} links")
+
+        for url in links:
+
+            product = get_product_state(url, js=site["js"])
+            if not product:
+                continue
+
+            title = product["title"]
+            new_hash = product["hash"]
+            raw = product["raw"]
+
+            if url not in state:
+                state[url] = {
+                    "hash": new_hash,
+                    "first_seen": str(datetime.now()),
+                    "last_seen": str(datetime.now())
+                }
+
+                log(f"🆕 DISCOVERED: {title}")
+
+                status = analyze_product(raw)
+                if status:
+                    send_alert(site["name"], url, title, status, "NEW PRODUCT")
+
+                continue
+
+            old_hash = state[url]["hash"]
+
+            if old_hash != new_hash:
+                log(f"⚡ CHANGE DETECTED: {title}")
+
+                status = analyze_product(raw)
+                if status:
+                    send_alert(site["name"], url, title, status, "PAGE UPDATED")
+
+            state[url]["hash"] = new_hash
+            state[url]["last_seen"] = str(datetime.now())
+
+# =========================
+# START
 # =========================
 
 def main():
 
     state = load_state()
 
-    discord_ping_startup()
-    print("🟢 Pokémon tracker running")
-
-    last_heartbeat = time.time()
+    log("🟢 Early Drop Radar Online (FIXED)")
 
     while True:
-
         start = time.time()
 
-        try:
-            run_cycle(state)
-            save_state(state)
-
-            if time.time() - last_heartbeat > HEARTBEAT_INTERVAL:
-                send_heartbeat()
-                last_heartbeat = time.time()
-
-        except Exception as e:
-            send_crash(str(e))
+        run(state)
+        save_state(state)
 
         time.sleep(max(5, POLL_INTERVAL - (time.time() - start)))
-
-# =========================
-# START
-# =========================
 
 if __name__ == "__main__":
     main()
