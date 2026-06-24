@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 from datetime import datetime
 import json
 import os
@@ -22,36 +23,37 @@ SITES = [
         "name": "JB HiFi",
         "url": "https://www.jbhifi.com.au/collections/collectibles-merchandise/pokemon-trading-cards",
         "allowed_prefix": "https://www.jbhifi.com.au",
+        "js": True
     },
     {
         "name": "EB Games",
         "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "allowed_prefix": "https://www.ebgames.com.au",
+        "js": True
     },
     {
         "name": "Pokemon Center",
         "url": "https://www.pokemoncenter.com/en-au/category/booster-packs",
         "allowed_prefix": "https://www.pokemoncenter.com/en-au",
+        "js": True
     },
     {
         "name": "Kmart",
         "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
         "allowed_prefix": "https://www.kmart.com.au",
+        "js": True
     },
     {
         "name": "Officeworks",
         "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
         "allowed_prefix": "https://www.officeworks.com.au",
+        "js": True
     },
     {
         "name": "Target",
         "url": "https://www.target.com.au/c/toys/trading-card-games/pokemon-cards/W1852642",
         "allowed_prefix": "https://www.target.com.au",
-    },
-    {
-        "name": "Gameology",
-        "url": "https://www.gameology.com.au/collections/pokemon",
-        "allowed_prefix": "https://www.gameology.com.au",
+        "js": True
     }
 ]
 
@@ -138,11 +140,21 @@ def send_alert(site, url, matches):
 # SCRAPE CATEGORY
 # =========================
 
-def scrape(url, site_name):
+def scrape(url, site_name, use_js=False):
     log("SCRAPE", url, site_name)
 
-    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    soup = BeautifulSoup(r.text, "html.parser")
+    if use_js:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(url, timeout=30000)
+            html = page.content()
+            browser.close()
+
+        soup = BeautifulSoup(html, "html.parser")
+    else:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
 
     log("SCRAPE", f"Found {len(soup.find_all('a'))} links", site_name)
     return soup
@@ -217,7 +229,7 @@ def run_cycle(state):
 
         log("SITE", site["name"], site["name"])
 
-        soup = scrape(site["url"], site["name"])
+        soup = scrape(site["url"], site["name"], site.get("js", False))
         links = extract_links(soup, site["url"], site["allowed_prefix"], site["name"])
 
         for url in links:
