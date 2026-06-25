@@ -20,9 +20,9 @@ POLL_INTERVAL = 30
 
 SITES = [
     {
-        "name": "JB HiFi",
-        "url": "https://www.jbhifi.com.au/collections/collectibles-merchandise/pokemon-trading-cards",
-        "allowed_prefix": "https://www.jbhifi.com.au",
+        "name": "Big W",
+        "url": "https://www.bigw.com.au/toys/trading-cards/pokemon-trading-cards/c/681510201",
+        "allowed_prefix": "https://www.bigw.com.au",
         "js": True
     },
     {
@@ -44,17 +44,23 @@ SITES = [
         "js": True
     },
     {
+        "name": "Target",
+        "url": "https://www.target.com.au/c/toys/trading-card-games/pokemon-cards/W1852642",
+        "allowed_prefix": "https://www.target.com.au",
+        "js": True
+    },
+    {
         "name": "Officeworks",
         "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
         "allowed_prefix": "https://www.officeworks.com.au",
         "js": True
     },
     {
-        "name": "Target",
-        "url": "https://www.target.com.au/c/toys/trading-card-games/pokemon-cards/W1852642",
-        "allowed_prefix": "https://www.target.com.au",
+        "name": "JB HiFi",
+        "url": "https://www.jbhifi.com.au/collections/collectibles-merchandise/pokemon-trading-cards",
+        "allowed_prefix": "https://www.jbhifi.com.au",
         "js": True
-    }
+    },
 ]
 
 TARGET_KEYWORDS = [
@@ -163,11 +169,26 @@ def scrape_js(url, site):
     log("SCRAPE", f"JS render {url}", site)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-
-        page.goto(url, timeout=30000)
-        page.wait_for_timeout(3000)
+        log("SCRAPE", "Opening browser", site)
+        browser = p.chromium.launch(headless=True, args=[
+            "--disable-http2",
+            "--disable-features=IsolateOrigins,site-per-process"
+            
+        ])
+        page = browser.new_page(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebkit/537.36 Chrome/137.0.0.0 Safari/537.36"
+        )
+        
+        if site == Big
+        log("SCRAPE", "Loading page", site)
+        try: 
+            page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(5000)
+        except Exception as e:
+            log("ERROR", f"goto failed: {e}", site)
+            raise
+        
+        log("SCRAPE", "Page loaded", site)
 
         # 🔥 scroll to force lazy-loaded products
         for _ in range(3):
