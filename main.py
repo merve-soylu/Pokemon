@@ -239,6 +239,45 @@ def scrape_js_dumb(url, site):
 
     return BeautifulSoup(html, "html.parser")
 
+def scrape_api_fallback(url, site):
+    log("SCRAPE", f"API/JSON fallback {url}", site)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        captured = []
+
+        def handle_response(response):
+            try:
+                if any(x in response.url.lower() for x in [
+                    "product", "search", "category", "plp", "collection", "graphql", "api"
+                ]):
+                    captured.append(response)
+            except:
+                pass
+
+        page.on("response", handle_response)
+
+        page.goto(url, wait_until="networkidle", timeout=60000)
+        page.wait_for_timeout(5000)
+
+        html = page.content()
+        browser.close()
+
+    # Try extracting JSON from responses
+    all_text = html.lower()
+
+    for r in captured:
+        try:
+            if "application/json" in r.headers.get("content-type", ""):
+                data = r.json()
+                all_text += json.dumps(data).lower()
+        except:
+            pass
+
+    return BeautifulSoup(all_text, "html.parser")
+
 # =========================
 # PRODUCT EXTRACTION
 # =========================
@@ -254,9 +293,9 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
 
         # MUCH broader capture (critical fix)
         if any(x in href for x in [
-            "/product", "/products", "/p/", "/c/",
-            "/collections", "/featured", "/category",
-            "/search", "/item"
+            "/product", "/products", "/p/",
+            "/c/", "/search", "/item",
+            "pokemon", "trading", "tcg"
         ]):
             links.add(href)
 
@@ -320,8 +359,8 @@ def run_cycle(known_products):
         name = site["name"]
 
         try:
-            if name == "Big W" or name == "Kmart" or name == "Target":
-                soup = scrape_js_dumb(site["url"], name)
+            if name in ["Big W", "Kmart", "Target", "Pokemon Center"]:
+                soup = scrape_api_fallback(site["url"], name)
             else:
                 soup = scrape_static(site["url"], name) if not site["js"] else scrape_js(site["url"], name)
 
