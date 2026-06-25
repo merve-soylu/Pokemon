@@ -179,7 +179,6 @@ def scrape_js(url, site):
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebkit/537.36 Chrome/137.0.0.0 Safari/537.36"
         )
         
-        if site == Big
         log("SCRAPE", "Loading page", site)
         try: 
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
