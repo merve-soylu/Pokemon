@@ -20,33 +20,9 @@ POLL_INTERVAL = 30
 
 SITES = [
     {
-        "name": "Big W",
-        "url": "https://www.bigw.com.au/toys/trading-cards/pokemon-trading-cards/c/681510201",
-        "allowed_prefix": "https://www.bigw.com.au",
-        "js": True
-    },
-    {
         "name": "EB Games",
         "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "allowed_prefix": "https://www.ebgames.com.au",
-        "js": True
-    },
-    {
-        "name": "Pokemon Center",
-        "url": "https://www.pokemoncenter.com/en-au/category/booster-packs",
-        "allowed_prefix": "https://www.pokemoncenter.com/en-au",
-        "js": False
-    },
-    {
-        "name": "Kmart",
-        "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
-        "allowed_prefix": "https://www.kmart.com.au",
-        "js": True
-    },
-    {
-        "name": "Target",
-        "url": "https://www.target.com.au/c/toys/trading-card-games/pokemon-cards/W1852642",
-        "allowed_prefix": "https://www.target.com.au",
         "js": True
     },
     {
@@ -201,82 +177,6 @@ def scrape_js(url, site):
     log("SCRAPE", f"Found {len(soup.find_all('a'))} links", site)
     return soup
 
-def scrape_js_dumb(url, site):
-    log("SCRAPE", f"BIG W dumb render {url}", site)
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-http2",
-                "--disable-dev-shm-usage",
-                "--no-sandbox"
-            ]
-        )
-
-        page = browser.new_page(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/137.0.0.0 Safari/537.36"
-        )
-
-        try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-
-            # minimal wait only
-            page.wait_for_timeout(2500)
-
-            # single gentle scroll
-            page.mouse.wheel(0, 1500)
-            page.wait_for_timeout(1000)
-
-        except Exception as e:
-            log("ERROR", f"Big W load failed: {e}", site)
-            browser.close()
-            raise
-
-        html = page.content()
-        browser.close()
-
-    return BeautifulSoup(html, "html.parser")
-
-def scrape_api_fallback(url, site):
-    log("SCRAPE", f"API/JSON fallback {url}", site)
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-
-        captured = []
-
-        def handle_response(response):
-            try:
-                if any(x in response.url.lower() for x in [
-                    "product", "search", "category", "plp", "collection", "graphql", "api"
-                ]):
-                    captured.append(response)
-            except:
-                pass
-
-        page.on("response", handle_response)
-
-        page.goto(url, wait_until="networkidle", timeout=60000)
-        page.wait_for_timeout(5000)
-
-        html = page.content()
-        browser.close()
-
-    # Try extracting JSON from responses
-    all_text = html.lower()
-
-    for r in captured:
-        try:
-            if "application/json" in r.headers.get("content-type", ""):
-                data = r.json()
-                all_text += json.dumps(data).lower()
-        except:
-            pass
-
-    return BeautifulSoup(all_text, "html.parser")
-
 # =========================
 # PRODUCT EXTRACTION
 # =========================
@@ -290,7 +190,7 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
         if not href.startswith(allowed_prefix):
             continue
 
-        # MUCH broader capture (critical fix)
+        # MUCH broader capture
         if any(x in href for x in [
             "/product", "/products", "/p/",
             "/c/", "/search", "/item",
@@ -358,10 +258,7 @@ def run_cycle(known_products):
         name = site["name"]
 
         try:
-            if name in ["Big W", "Kmart", "Target", "Pokemon Center"]:
-                soup = scrape_api_fallback(site["url"], name)
-            else:
-                soup = scrape_static(site["url"], name) if not site["js"] else scrape_js(site["url"], name)
+            soup = scrape_static(site["url"], name) if not site["js"] else scrape_js(site["url"], name)
 
             links = extract_product_links(
                 soup,
