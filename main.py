@@ -15,7 +15,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+
 STATE_FILE = "state.json"
+SESSION_FILE = "session.json"
 
 POLL_INTERVAL = 75
 
@@ -62,12 +64,9 @@ AVAILABILITY_KEYWORDS = [
     "available now", "coming soon",
     "notify me",
     "add to cart",
-    "add to basket",
-    "buy now",
     "in stock",
-    "order now",
-    "add to bag",
-    "reserve now"
+    "buy now",
+    "order now"
 ]
 
 STATUS_PRIORITY = {
@@ -77,12 +76,7 @@ STATUS_PRIORITY = {
     "pre order": 3,
     "pre-order": 3,
     "preorder": 3,
-    "reserve now": 3,
     "add to cart": 4,
-    "add to basket": 4,
-    "add to bag": 4,
-    "buy now": 5,
-    "order now": 5,
     "in stock": 6
 }
 
@@ -101,22 +95,30 @@ def log(level, msg, site=None):
 def load_state():
     if not os.path.exists(STATE_FILE):
         return {}
-
     try:
         with open(STATE_FILE, "r") as f:
-            data = json.load(f)
-
-        cleaned = {}
-        for k, v in data.items():
-            if isinstance(v, dict):
-                cleaned[k] = v
-        return cleaned
+            return json.load(f)
     except:
         return {}
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
+
+# =========================
+# SESSION STORAGE
+# =========================
+
+def load_session():
+    if os.path.exists(SESSION_FILE):
+        return SESSION_FILE
+    return None
+
+def save_session(context):
+    try:
+        context.storage_state(path=SESSION_FILE)
+    except Exception as e:
+        log("ERROR", f"Failed saving session: {e}")
 
 # =========================
 # DISCORD
@@ -147,7 +149,7 @@ def send_alert(site, url, targets, availability):
 # =========================
 
 def scrape_js(url, site, context):
-    log("SCRAPE", f"JS render {url}", site)
+    log("SCRAPE", url, site)
 
     page = context.new_page()
     html = ""
@@ -155,24 +157,23 @@ def scrape_js(url, site, context):
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
-        # allow bot checks to resolve
+        # give time for bot challenge redirect
+        page.wait_for_timeout(6000)
+
+        # wait loop for real content
         for _ in range(6):
             html = page.content().lower()
 
-            if any(x in html for x in ["product", "add to cart", "in stock"]):
+            if any(x in html for x in ["add to cart", "in stock", "product"]):
                 break
 
-            if any(x in html for x in [
-                "just a moment",
-                "checking your browser",
-                "cf-browser-verification",
-                "attention required"
-            ]):
-                log("WAIT", "Bot check running...", site)
+            if any(x in html for x in ["just a moment", "checking your browser"]):
+                log("WAIT", "Bot check still running...", site)
                 page.wait_for_timeout(5000)
             else:
                 break
 
+        # mimic user scroll
         for _ in range(3):
             page.mouse.wheel(0, 2000)
             page.wait_for_timeout(1000)
@@ -185,13 +186,13 @@ def scrape_js(url, site, context):
     finally:
         page.close()
 
-    return BeautifulSoup(html if html else "", "html.parser")
+    return BeautifulSoup(html or "", "html.parser")
 
 # =========================
-# LINKS
+# PRODUCT PARSING
 # =========================
 
-def extract_product_links(soup, base_url, allowed_prefix):
+def extract_links(soup, base_url, allowed_prefix):
     links = set()
 
     for a in soup.find_all("a", href=True):
@@ -205,16 +206,7 @@ def extract_product_links(soup, base_url, allowed_prefix):
 
     return links
 
-# =========================
-# PRODUCT CHECK
-# =========================
-
-cache = {}
-
 def check_product(url):
-    if url in cache:
-        return cache[url]
-
     try:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     except:
@@ -224,62 +216,53 @@ def check_product(url):
     text = soup.get_text(" ", strip=True).lower()
 
     if any(b in text for b in BLOCKED_KEYWORDS):
-        cache[url] = ([], [], False)
-        return cache[url]
+        return [], [], False
 
     matches = [k for k in TARGET_KEYWORDS if k in text]
     availability = [k for k in AVAILABILITY_KEYWORDS if k in text]
 
-    booster_ok = any(x in text for x in ["booster", "tcg", "booster pack", "tin"])
+    booster_ok = any(x in text for x in ["booster", "tcg", "tin"])
 
-    cache[url] = (matches, availability, booster_ok)
-    return cache[url]
+    return matches, availability, booster_ok
 
 # =========================
-# CYCLE
+# MAIN CYCLE
 # =========================
 
 def run_cycle(state, context):
 
     for site in SITES:
+
         name = site["name"]
 
-        try:
-            soup = scrape_js(site["url"], name, context)
+        soup = scrape_js(site["url"], name, context)
 
-            if not soup.find_all("a"):
-                log("WARN", "Empty page / blocked", name)
-                continue
+        if not soup.find_all("a"):
+            log("WARN", "Empty or blocked page", name)
+            continue
 
-            links = extract_product_links(
-                soup,
-                site["url"],
-                site["allowed_prefix"]
-            )
+        links = extract_links(soup, site["url"], site["allowed_prefix"])
 
-            for url in links:
+        for url in links:
 
-                key = f"{name}::{url}"
+            key = f"{name}::{url}"
 
-                matches, availability, ok = check_product(url)
+            matches, availability, ok = check_product(url)
 
-                status = max([STATUS_PRIORITY.get(x, -1) for x in availability] + [-1])
+            status = max([STATUS_PRIORITY.get(x, -1) for x in availability] + [-1])
 
-                old = state.get(key)
+            old = state.get(key)
 
-                if old is None or status > old.get("status", -1):
+            if old is None or status > old.get("status", -1):
 
-                    state[key] = {
-                        "status": status,
-                        "availability": availability,
-                        "matches": matches
-                    }
+                state[key] = {
+                    "status": status,
+                    "availability": availability,
+                    "matches": matches
+                }
 
-                    if matches and ok:
-                        send_alert(name, url, matches, availability)
-
-        except Exception as e:
-            log("ERROR", str(e), name)
+                if matches and ok:
+                    send_alert(name, url, matches, availability)
 
         time.sleep(random.uniform(2, 4))
 
@@ -296,24 +279,33 @@ def main():
     with sync_playwright() as p:
 
         browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
+            headless=False,  # IMPORTANT
+            slow_mo=50
         )
 
         context = browser.new_context(
+            storage_state=load_session(),  # <-- SESSION REUSE
+            viewport={"width": 1280, "height": 720},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
-            viewport={"width": 1280, "height": 720}
+            locale="en-AU"
         )
 
-        log("SYSTEM", "Tracker running")
+        log("SYSTEM", "Tracker running (persistent session + visible browser)")
 
-        while True:
-            start = time.time()
+        try:
+            while True:
+                start = time.time()
 
-            run_cycle(state, context)
+                run_cycle(state, context)
 
-            sleep_time = max(10, POLL_INTERVAL - (time.time() - start))
-            time.sleep(sleep_time + random.uniform(0, 3))
+                save_session(context)  # <-- SAVE COOKIES EVERY LOOP
+
+                sleep_time = max(10, POLL_INTERVAL - (time.time() - start))
+                time.sleep(sleep_time + random.uniform(0, 3))
+
+        finally:
+            save_session(context)
+            browser.close()
 
 if __name__ == "__main__":
     main()
