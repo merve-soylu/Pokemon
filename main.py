@@ -106,19 +106,17 @@ def save_state(state):
         json.dump(state, f, indent=2)
 
 # =========================
-# SESSION STORAGE
+# SESSION
 # =========================
 
 def load_session():
-    if os.path.exists(SESSION_FILE):
-        return SESSION_FILE
-    return None
+    return SESSION_FILE if os.path.exists(SESSION_FILE) else None
 
 def save_session(context):
     try:
         context.storage_state(path=SESSION_FILE)
     except Exception as e:
-        log("ERROR", f"Failed saving session: {e}")
+        log("ERROR", f"Session save failed: {e}")
 
 # =========================
 # DISCORD
@@ -126,70 +124,66 @@ def save_session(context):
 
 def send_alert(site, url, targets, availability):
     try:
-        embed = {
-            "title": "🚨 PRODUCT DETECTED",
-            "description": f"{site} product found",
-            "fields": [
-                {"name": "URL", "value": url[:1000]},
-                {"name": "Matches", "value": ", ".join(targets) or "None"},
-                {"name": "Status", "value": ", ".join(availability) or "None"},
-            ]
-        }
-
-        requests.post(
-            DISCORD_WEBHOOK,
-            json={"content": "@everyone", "embeds": [embed]},
-            timeout=10
-        )
+        requests.post(DISCORD_WEBHOOK, json={
+            "content": "@everyone 🚨 PRODUCT DETECTED",
+            "embeds": [{
+                "title": "Product Found",
+                "description": site,
+                "fields": [
+                    {"name": "URL", "value": url[:1000]},
+                    {"name": "Matches", "value": ", ".join(targets) or "None"},
+                    {"name": "Status", "value": ", ".join(availability) or "None"},
+                ]
+            }]
+        }, timeout=10)
     except:
         pass
 
 # =========================
-# SCRAPING
+# SCRAPER CORE
 # =========================
 
 def scrape_js(url, site, context):
-    log("SCRAPE", url, site)
 
     page = context.new_page()
-    html = ""
 
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
-        # give time for bot challenge redirect
-        page.wait_for_timeout(6000)
+        # allow challenge/redirect
+        page.wait_for_timeout(5000)
 
-        # wait loop for real content
-        for _ in range(6):
+        # WAIT FOR REAL NAVIGATION CHANGE (IMPORTANT FIX)
+        for _ in range(10):
             html = page.content().lower()
 
+            if "just a moment" in html or "checking your browser" in html:
+                log("WAIT", "Verification running...", site)
+                page.wait_for_timeout(3000)
+                continue
+
+            # success condition
             if any(x in html for x in ["add to cart", "in stock", "product"]):
                 break
 
-            if any(x in html for x in ["just a moment", "checking your browser"]):
-                log("WAIT", "Bot check still running...", site)
-                page.wait_for_timeout(5000)
-            else:
-                break
+            page.wait_for_timeout(2000)
 
-        # mimic user scroll
+        # extra scroll to trigger lazy load
         for _ in range(3):
             page.mouse.wheel(0, 2000)
             page.wait_for_timeout(1000)
 
-        html = page.content()
+        return BeautifulSoup(page.content(), "html.parser")
 
     except Exception as e:
         log("ERROR", str(e), site)
+        return BeautifulSoup("", "html.parser")
 
     finally:
         page.close()
 
-    return BeautifulSoup(html or "", "html.parser")
-
 # =========================
-# PRODUCT PARSING
+# PRODUCT LOGIC
 # =========================
 
 def extract_links(soup, base_url, allowed_prefix):
@@ -206,6 +200,7 @@ def extract_links(soup, base_url, allowed_prefix):
 
     return links
 
+
 def check_product(url):
     try:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
@@ -221,12 +216,12 @@ def check_product(url):
     matches = [k for k in TARGET_KEYWORDS if k in text]
     availability = [k for k in AVAILABILITY_KEYWORDS if k in text]
 
-    booster_ok = any(x in text for x in ["booster", "tcg", "tin"])
+    ok = any(x in text for x in ["booster", "tcg", "tin", "booster pack"])
 
-    return matches, availability, booster_ok
+    return matches, availability, ok
 
 # =========================
-# MAIN CYCLE
+# MAIN LOOP
 # =========================
 
 def run_cycle(state, context):
@@ -238,7 +233,7 @@ def run_cycle(state, context):
         soup = scrape_js(site["url"], name, context)
 
         if not soup.find_all("a"):
-            log("WARN", "Empty or blocked page", name)
+            log("WARN", "Empty/blocked page", name)
             continue
 
         links = extract_links(soup, site["url"], site["allowed_prefix"])
@@ -279,18 +274,18 @@ def main():
     with sync_playwright() as p:
 
         browser = p.chromium.launch(
-            headless=False,  # IMPORTANT
-            slow_mo=50
+            headless=False,
+            slow_mo=30
         )
 
         context = browser.new_context(
-            storage_state=load_session(),  # <-- SESSION REUSE
+            storage_state=load_session(),
             viewport={"width": 1280, "height": 720},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
+            user_agent="Mozilla/5.0 Windows Chrome/120",
             locale="en-AU"
         )
 
-        log("SYSTEM", "Tracker running (persistent session + visible browser)")
+        log("SYSTEM", "Running tracker (persistent session + visible browser)")
 
         try:
             while True:
@@ -298,7 +293,7 @@ def main():
 
                 run_cycle(state, context)
 
-                save_session(context)  # <-- SAVE COOKIES EVERY LOOP
+                save_session(context)
 
                 sleep_time = max(10, POLL_INTERVAL - (time.time() - start))
                 time.sleep(sleep_time + random.uniform(0, 3))
