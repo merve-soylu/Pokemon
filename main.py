@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import os
 import time
+import random
 from urllib.parse import urljoin
 from dotenv import load_dotenv
 
@@ -16,7 +17,7 @@ load_dotenv()
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 STATE_FILE = "state.json"
 
-POLL_INTERVAL = 60  # slightly safer than 30 for bot protection sites
+POLL_INTERVAL = 75  # slower = fewer blocks
 
 SITES = [
     {
@@ -91,10 +92,7 @@ STATUS_PRIORITY = {
 
 def log(level, msg, site=None):
     now = datetime.now().strftime("%H:%M:%S")
-    if site:
-        print(f"[{now}] [{level}] [{site}] {msg}")
-    else:
-        print(f"[{now}] [{level}] {msg}")
+    print(f"[{now}] [{level}] [{site}] {msg}" if site else f"[{now}] [{level}] {msg}")
 
 # =========================
 # STATE
@@ -109,21 +107,16 @@ def load_state():
             data = json.load(f)
 
         cleaned = {}
-
         for k, v in data.items():
-            if not isinstance(v, dict):
-                continue
-
-            cleaned[k] = {
-                "status": v.get("status", -1),
-                "availability": v.get("availability", []),
-                "matches": v.get("matches", [])
-            }
-
+            if isinstance(v, dict):
+                cleaned[k] = {
+                    "status": v.get("status", -1),
+                    "availability": v.get("availability", []),
+                    "matches": v.get("matches", [])
+                }
         return cleaned
 
-    except Exception as e:
-        print("STATE LOAD ERROR:", e)
+    except Exception:
         return {}
 
 def save_state(state):
@@ -134,66 +127,69 @@ def save_state(state):
 # DISCORD
 # =========================
 
-def discord_ping_startup():
-    try:
-        requests.post(DISCORD_WEBHOOK, json={"content": "🟢 Pokémon tracker ONLINE"}, timeout=10)
-    except:
-        pass
-
-def send_crash(message):
-    try:
-        requests.post(
-            DISCORD_WEBHOOK,
-            json={"content": f"❌ Pokémon tracker CRASHED:\n```{message}```"},
-            timeout=10
-        )
-    except:
-        pass
-
 def send_alert(site, url, targets, availability):
-    log("ALERT", "Sending Discord alert", site)
-
-    embed = {
-        "title": "🚨 NEW POKéMON PRODUCT DETECTED",
-        "description": f"**{site}** Pokémon booster product found",
-        "color": 16711680,
-        "fields": [
-            {"name": "Product URL", "value": url[:1024]},
-            {"name": "Matches", "value": ", ".join(targets) or "None"},
-            {"name": "Status", "value": ", ".join(availability) or "None"},
-            {"name": "Time", "value": str(datetime.now())}
-        ]
-    }
-
     try:
-        requests.post(
-            DISCORD_WEBHOOK,
-            json={"content": "@everyone 🚨 BOOSTER DROP DETECTED", "embeds": [embed]},
-            timeout=10
-        )
+        embed = {
+            "title": "🚨 PRODUCT DETECTED",
+            "description": f"{site} product found",
+            "fields": [
+                {"name": "URL", "value": url[:1000]},
+                {"name": "Matches", "value": ", ".join(targets) or "None"},
+                {"name": "Status", "value": ", ".join(availability) or "None"},
+            ]
+        }
+
+        requests.post(DISCORD_WEBHOOK, json={"content": "@everyone", "embeds": [embed]}, timeout=10)
     except:
         pass
 
 # =========================
-# SCRAPERS
+# SCRAPING
 # =========================
 
 def scrape_static(url, site):
-    log("SCRAPE", url, site)
-    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    return BeautifulSoup(r.text, "html.parser")
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        return BeautifulSoup(r.text, "html.parser")
+    except:
+        return BeautifulSoup("", "html.parser")
 
 
-def scrape_js(url, site, page):
+def scrape_js(url, site, context):
     log("SCRAPE", f"JS render {url}", site)
 
-    html = ""
+    page = context.new_page()
 
+    html = ""
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(5000)
-        page.wait_for_load_state("domcontentloaded")
 
+        # STEP 1: give initial JS challenge time
+        page.wait_for_timeout(3000)
+
+        # STEP 2: WAIT FOR EITHER REDIRECT OR STABILITY
+        for _ in range(6):  # ~30 seconds max wait loop
+            html = page.content().lower()
+
+            # If we reached real content, break early
+            if "product" in html or "add to cart" in html or "in stock" in html:
+                break
+
+            # If still on challenge page, wait a bit more
+            if any(x in html for x in [
+                "just a moment",
+                "checking your browser",
+                "cf-browser-verification",
+                "attention required"
+            ]):
+                log("WAIT", "Bot check still resolving...", site)
+                page.wait_for_timeout(5000)
+
+            else:
+                # page changed, likely redirected
+                break
+
+        # STEP 3: final scroll (after redirect likely completed)
         for _ in range(3):
             page.mouse.wheel(0, 2000)
             page.wait_for_timeout(1000)
@@ -202,20 +198,21 @@ def scrape_js(url, site, page):
 
     except Exception as e:
         log("ERROR", f"goto failed: {e}", site)
-        return BeautifulSoup("", "html.parser")
+
+    finally:
+        page.close()
 
     if not html:
         return BeautifulSoup("", "html.parser")
 
     lower = html.lower()
 
-    if (
-        "checking your browser" in lower or
-        "cf-browser-verification" in lower or
-        "just a moment" in lower or
-        "attention required" in lower
-    ):
-        log("BLOCKED", "Bot verification detected", site)
+    if any(x in lower for x in [
+        "just a moment",
+        "checking your browser",
+        "cf-browser-verification"
+    ]):
+        log("BLOCKED", "Still on verification page after wait", site)
         return BeautifulSoup("", "html.parser")
 
     return BeautifulSoup(html, "html.parser")
@@ -233,31 +230,20 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
         if not href.startswith(allowed_prefix):
             continue
 
-        if any(x in href for x in [
-            "/product", "/products", "/p/",
-            "/c/", "/search", "/item",
-            "pokemon", "trading", "tcg"
-        ]):
+        if any(x in href for x in ["/product", "/products", "/p/", "/search", "pokemon", "tcg"]):
             links.add(href)
 
-    log("FOUND", f"{len(links)} product links", site)
     return links
-
-def highest_status(statuses):
-    return max([STATUS_PRIORITY.get(s, -1) for s in statuses] + [-1])
 
 # =========================
 # PRODUCT CHECK
 # =========================
 
-product_cache = {}
+cache = {}
 
-def check_product_page(url, site):
-    if not url:
-        return [], [], False
-
-    if url in product_cache:
-        return product_cache[url]
+def check_product(url):
+    if url in cache:
+        return cache[url]
 
     try:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
@@ -266,92 +252,62 @@ def check_product_page(url, site):
 
     soup = BeautifulSoup(r.text, "html.parser")
 
-    title = soup.title.get_text(" ", strip=True).lower() if soup.title else ""
-    headings = " ".join(h.get_text(" ", strip=True).lower()
-                        for h in soup.find_all(["h1", "h2"]))
-    body = soup.get_text(" ", strip=True).lower()
+    text = soup.get_text(" ", strip=True).lower()
 
-    combined = f"{title} {headings} {body}"
+    if any(b in text for b in BLOCKED_KEYWORDS):
+        cache[url] = ([], [], False)
+        return cache[url]
 
-    if any(b in combined for b in BLOCKED_KEYWORDS):
-        product_cache[url] = ([], [], False)
-        return [], [], False
+    matches = [k for k in TARGET_KEYWORDS if k in text]
+    availability = [k for k in AVAILABILITY_KEYWORDS if k in text]
 
-    matches = [k for k in TARGET_KEYWORDS if k in combined]
-    availability = [k for k in AVAILABILITY_KEYWORDS if k in combined]
+    booster_ok = any(x in text for x in ["booster", "tcg", "booster pack", "tin"])
 
-    booster_ok = any(x in combined for x in [
-        "booster", "booster pack", "booster box", "tcg", "trading card", "tin"
-    ])
-
-    product_cache[url] = (matches, availability, booster_ok)
-
-    return matches, availability, booster_ok
+    cache[url] = (matches, availability, booster_ok)
+    return cache[url]
 
 # =========================
 # MAIN LOOP
 # =========================
 
-def run_cycle(known_products, page):
-
-    log("SYSTEM", "Starting scan cycle")
+def run_cycle(state, page):
 
     for site in SITES:
 
         name = site["name"]
 
-        try:
-            if site["js"]:
-                soup = scrape_js(site["url"], name, page)
-            else:
-                soup = scrape_static(site["url"], name)
+        soup = scrape_js(site["url"], name, page) if site["js"] else scrape_static(site["url"], name)
 
-            if not soup.find_all("a"):
-                log("WARN", "Empty page (possible block)", name)
+        if not soup.find_all("a"):
+            log("WARN", "Empty or blocked page", name)
+            continue
 
-            links = extract_product_links(
-                soup,
-                site["url"],
-                site["allowed_prefix"],
-                name
-            )
+        links = extract_product_links(soup, site["url"], site["allowed_prefix"], name)
 
-            for url in links:
+        for url in links:
 
-                key = f"{name}::{url}"
+            key = f"{name}::{url}"
 
-                matches, availability, booster_ok = check_product_page(url, name)
+            matches, availability, ok = check_product(url)
 
-                old = known_products.get(key)
-                current_status = highest_status(availability)
+            status = max([STATUS_PRIORITY.get(x, -1) for x in availability] + [-1])
 
-                if old is None:
-                    known_products[key] = {
-                        "status": current_status,
-                        "availability": availability,
-                        "matches": matches
-                    }
+            old = state.get(key)
 
-                    if matches and booster_ok:
-                        send_alert(name, url, matches, availability)
+            if old is None or status > old.get("status", -1):
 
-                else:
-                    old_status = old.get("status", -1)
+                state[key] = {
+                    "status": status,
+                    "availability": availability,
+                    "matches": matches
+                }
 
-                    if current_status > old_status:
-                        known_products[key]["status"] = current_status
-                        known_products[key]["availability"] = availability
-                        known_products[key]["matches"] = matches
+                if matches and ok:
+                    send_alert(name, url, matches, availability)
 
-                        if matches and booster_ok:
-                            send_alert(name, url, matches, availability)
+        time.sleep(random.uniform(2, 5))  # prevents aggressive bursts
 
-        except Exception as e:
-            log("ERROR", str(e), name)
-            send_crash(f"{name} error: {e}")
-
-    save_state(known_products)
-    log("STATE", f"Saved {len(known_products)} products")
+    save_state(state)
 
 # =========================
 # MAIN
@@ -359,23 +315,14 @@ def run_cycle(known_products, page):
 
 def main():
 
-    known_products = load_state()
-
-    discord_ping_startup()
-    log("SYSTEM", "🟢 Tracker running")
+    state = load_state()
 
     with sync_playwright() as p:
 
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
-        )
-
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-            viewport={"width": 1280, "height": 720},
-            locale="en-AU",
-            extra_http_headers={"accept-language": "en-AU,en;q=0.9"}
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
+            viewport={"width": 1280, "height": 720}
         )
 
         page = context.new_page()
@@ -383,13 +330,10 @@ def main():
         while True:
             start = time.time()
 
-            try:
-                run_cycle(known_products, page)
-            except Exception as e:
-                send_crash(str(e))
-                log("FATAL", str(e))
+            run_cycle(state, page)
 
-            time.sleep(max(5, POLL_INTERVAL - (time.time() - start)))
+            sleep_time = max(10, POLL_INTERVAL - (time.time() - start))
+            time.sleep(sleep_time + random.uniform(0, 5))
 
 if __name__ == "__main__":
     main()
