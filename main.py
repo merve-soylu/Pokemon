@@ -97,14 +97,35 @@ def log(level, msg, site=None):
         print(f"[{now}] [{level}] {msg}")
 
 # =========================
-# STATE
+# STATE (FIXED + SANITISED)
 # =========================
 
 def load_state():
-    if os.path.exists(STATE_FILE):
+    if not os.path.exists(STATE_FILE):
+        return {}
+
+    try:
         with open(STATE_FILE, "r") as f:
-            return json.load(f)
-    return {}
+            data = json.load(f)
+
+        cleaned = {}
+
+        for k, v in data.items():
+            if not isinstance(v, dict):
+                continue
+
+            cleaned[k] = {
+                "status": v.get("status", -1),
+                "availability": v.get("availability", []),
+                "matches": v.get("matches", [])
+            }
+
+        return cleaned
+
+    except Exception as e:
+        print("STATE LOAD ERROR:", e)
+        return {}
+
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
@@ -115,11 +136,11 @@ def save_state(state):
 # =========================
 
 def discord_ping_startup():
-    requests.post(
-        DISCORD_WEBHOOK,
-        json={"content": "🟢 Pokémon tracker ONLINE"},
-        timeout=10
-    )
+    try:
+        requests.post(DISCORD_WEBHOOK, json={"content": "🟢 Pokémon tracker ONLINE"}, timeout=10)
+    except:
+        pass
+
 
 def send_crash(message):
     try:
@@ -130,6 +151,7 @@ def send_crash(message):
         )
     except:
         pass
+
 
 def send_alert(site, url, targets, availability):
     log("ALERT", "Sending Discord alert", site)
@@ -146,11 +168,14 @@ def send_alert(site, url, targets, availability):
         ]
     }
 
-    requests.post(
-        DISCORD_WEBHOOK,
-        json={"content": "@everyone 🚨 BOOSTER DROP DETECTED", "embeds": [embed]},
-        timeout=10
-    )
+    try:
+        requests.post(
+            DISCORD_WEBHOOK,
+            json={"content": "@everyone 🚨 BOOSTER DROP DETECTED", "embeds": [embed]},
+            timeout=10
+        )
+    except:
+        pass
 
 # =========================
 # SCRAPERS
@@ -160,34 +185,24 @@ def scrape_static(url, site):
     log("SCRAPE", url, site)
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     soup = BeautifulSoup(r.text, "html.parser")
-    log("SCRAPE", f"Found {len(soup.find_all('a'))} links", site)
     return soup
+
 
 def scrape_js(url, site):
     log("SCRAPE", f"JS render {url}", site)
 
     with sync_playwright() as p:
-        log("SCRAPE", "Opening browser", site)
-        browser = p.chromium.launch(headless=True, args=[
-            "--disable-http2",
-            "--disable-features=IsolateOrigins,site-per-process"
-            
-        ])
-        page = browser.new_page(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebkit/537.36 Chrome/137.0.0.0 Safari/537.36"
-        )
-        
-        log("SCRAPE", "Loading page", site)
-        try: 
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        try:
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(5000)
         except Exception as e:
             log("ERROR", f"goto failed: {e}", site)
+            browser.close()
             raise
-        
-        log("SCRAPE", "Page loaded", site)
 
-        # 🔥 scroll to force lazy-loaded products
         for _ in range(3):
             page.mouse.wheel(0, 2000)
             page.wait_for_timeout(1000)
@@ -195,9 +210,7 @@ def scrape_js(url, site):
         html = page.content()
         browser.close()
 
-    soup = BeautifulSoup(html, "html.parser")
-    log("SCRAPE", f"Found {len(soup.find_all('a'))} links", site)
-    return soup
+    return BeautifulSoup(html, "html.parser")
 
 # =========================
 # PRODUCT EXTRACTION
@@ -207,12 +220,15 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
     links = set()
 
     for a in soup.find_all("a", href=True):
-        href = urljoin(base_url, a["href"]).split("?")[0]
+        href_raw = a.get("href")
+        if not href_raw:
+            continue
+
+        href = urljoin(base_url, href_raw).split("?")[0]
 
         if not href.startswith(allowed_prefix):
             continue
 
-        # MUCH broader capture
         if any(x in href for x in [
             "/product", "/products", "/p/",
             "/c/", "/search", "/item",
@@ -223,38 +239,40 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
     log("FOUND", f"{len(links)} product links", site)
     return links
 
+
 def highest_status(statuses):
-    highest = -1
-
-    for s in statuses:
-        highest = max(highest, STATUS_PRIORITY.get(s, -1))
-
-    return highest
+    return max([STATUS_PRIORITY.get(s, -1) for s in statuses] + [-1])
 
 # =========================
-# PRODUCT CHECK
+# PRODUCT CHECK (FIXED URL SAFETY)
 # =========================
 
 product_cache = {}
 
 def check_product_page(url, site):
+    if not url or not isinstance(url, str):
+        log("ERROR", f"Invalid URL skipped: {url}", site)
+        return [], [], False
+
     if url in product_cache:
         return product_cache[url]
 
-    log("CHECK", url, site)
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+    except Exception as e:
+        log("ERROR", f"request failed: {e}", site)
+        return [], [], False
 
-    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
     soup = BeautifulSoup(r.text, "html.parser")
 
     title = soup.title.get_text(" ", strip=True).lower() if soup.title else ""
-    headings = " ".join(h.get_text(" ", strip=True).lower() for h in soup.find_all(["h1", "h2"]))
+    headings = " ".join(h.get_text(" ", strip=True).lower()
+                        for h in soup.find_all(["h1", "h2"]))
     body = soup.get_text(" ", strip=True).lower()
 
     combined = f"{title} {headings} {body}"
 
-    # FIXED: correct variable (was "text")
     if any(b in combined for b in BLOCKED_KEYWORDS):
-        log("BLOCKED", url, site)
         product_cache[url] = ([], [], False)
         return [], [], False
 
@@ -262,17 +280,10 @@ def check_product_page(url, site):
     availability = [k for k in AVAILABILITY_KEYWORDS if k in combined]
 
     booster_ok = any(x in combined for x in [
-        "booster",
-        "booster pack",
-        "booster box",
-        "tcg",
-        "trading card",
-        "tin"
+        "booster", "booster pack", "booster box", "tcg", "trading card", "tin"
     ])
 
     product_cache[url] = (matches, availability, booster_ok)
-
-    log("MATCH", f"{url} -> {matches}", site)
 
     return matches, availability, booster_ok
 
@@ -300,18 +311,17 @@ def run_cycle(known_products):
 
             for url in links:
 
+                if not url:
+                    continue
+
                 key = f"{name}::{url}"
 
                 matches, availability, booster_ok = check_product_page(url, name)
 
                 old = known_products.get(key)
-
                 current_status = highest_status(availability)
 
                 if old is None:
-
-                    log("NEW", url, name)
-
                     known_products[key] = {
                         "status": current_status,
                         "availability": availability,
@@ -322,27 +332,15 @@ def run_cycle(known_products):
                         send_alert(name, url, matches, availability)
 
                 else:
-
                     old_status = old.get("status", -1)
 
                     if current_status > old_status:
-
-                        log(
-                            "UPDATE",
-                            f"{old.get('availability')} -> {availability}",
-                            name
-                        )
-
                         known_products[key]["status"] = current_status
                         known_products[key]["availability"] = availability
                         known_products[key]["matches"] = matches
 
                         if matches and booster_ok:
                             send_alert(name, url, matches, availability)
-
-                    else:
-
-                        log("SEEN", url, name)
 
         except Exception as e:
             log("ERROR", str(e), name)
@@ -372,6 +370,7 @@ def main():
             log("FATAL", str(e))
 
         time.sleep(max(5, POLL_INTERVAL - (time.time() - start)))
+
 
 if __name__ == "__main__":
     main()
