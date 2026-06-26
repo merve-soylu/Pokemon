@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 from datetime import datetime
 import json
 import os
@@ -194,6 +195,7 @@ def scrape_js(url, site):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
+        stealth_sync(page)
 
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
