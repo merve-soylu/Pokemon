@@ -1,8 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
-from playwright_stealth import Stealth
-import random
 from datetime import datetime
 import json
 import os
@@ -18,7 +16,7 @@ load_dotenv()
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 STATE_FILE = "state.json"
 
-POLL_INTERVAL = 60
+POLL_INTERVAL = 60  # slightly safer than 30 for bot protection sites
 
 SITES = [
     {
@@ -99,7 +97,7 @@ def log(level, msg, site=None):
         print(f"[{now}] [{level}] {msg}")
 
 # =========================
-# STATE (FIXED + SANITISED)
+# STATE
 # =========================
 
 def load_state():
@@ -128,7 +126,6 @@ def load_state():
         print("STATE LOAD ERROR:", e)
         return {}
 
-
 def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
@@ -143,7 +140,6 @@ def discord_ping_startup():
     except:
         pass
 
-
 def send_crash(message):
     try:
         requests.post(
@@ -153,7 +149,6 @@ def send_crash(message):
         )
     except:
         pass
-
 
 def send_alert(site, url, targets, availability):
     log("ALERT", "Sending Discord alert", site)
@@ -186,44 +181,42 @@ def send_alert(site, url, targets, availability):
 def scrape_static(url, site):
     log("SCRAPE", url, site)
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    soup = BeautifulSoup(r.text, "html.parser")
-    return soup
+    return BeautifulSoup(r.text, "html.parser")
 
 
-def scrape_js(url, site):
+def scrape_js(url, site, page):
     log("SCRAPE", f"JS render {url}", site)
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
-        )
+    html = ""
 
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-            viewport={"width": 1280, "height": 720},
-            locale="en-AU",
-            extra_http_headers={"accept-language": "en-AU,en;q=0.9"}
-        )
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(5000)
+        page.wait_for_load_state("domcontentloaded")
 
-        page = context.new_page()
+        for _ in range(3):
+            page.mouse.wheel(0, 2000)
+            page.wait_for_timeout(1000)
 
-        # ✅ correct usage for 2.0.3
-        stealth_sync(page)
+        html = page.content()
 
-        try:
-            page.goto(url, wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_timeout(4000)
+    except Exception as e:
+        log("ERROR", f"goto failed: {e}", site)
+        return BeautifulSoup("", "html.parser")
 
-            html = page.content()
+    if not html:
+        return BeautifulSoup("", "html.parser")
 
-        except Exception as e:
-            log("ERROR", f"goto failed: {e}", site)
-            html = ""
+    lower = html.lower()
 
-        finally:
-            context.close()
-            browser.close()
+    if (
+        "checking your browser" in lower or
+        "cf-browser-verification" in lower or
+        "just a moment" in lower or
+        "attention required" in lower
+    ):
+        log("BLOCKED", "Bot verification detected", site)
+        return BeautifulSoup("", "html.parser")
 
     return BeautifulSoup(html, "html.parser")
 
@@ -235,11 +228,7 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
     links = set()
 
     for a in soup.find_all("a", href=True):
-        href_raw = a.get("href")
-        if not href_raw:
-            continue
-
-        href = urljoin(base_url, href_raw).split("?")[0]
+        href = urljoin(base_url, a["href"]).split("?")[0]
 
         if not href.startswith(allowed_prefix):
             continue
@@ -254,19 +243,17 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
     log("FOUND", f"{len(links)} product links", site)
     return links
 
-
 def highest_status(statuses):
     return max([STATUS_PRIORITY.get(s, -1) for s in statuses] + [-1])
 
 # =========================
-# PRODUCT CHECK (FIXED URL SAFETY)
+# PRODUCT CHECK
 # =========================
 
 product_cache = {}
 
 def check_product_page(url, site):
-    if not url or not isinstance(url, str):
-        log("ERROR", f"Invalid URL skipped: {url}", site)
+    if not url:
         return [], [], False
 
     if url in product_cache:
@@ -274,8 +261,7 @@ def check_product_page(url, site):
 
     try:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    except Exception as e:
-        log("ERROR", f"request failed: {e}", site)
+    except:
         return [], [], False
 
     soup = BeautifulSoup(r.text, "html.parser")
@@ -306,7 +292,7 @@ def check_product_page(url, site):
 # MAIN LOOP
 # =========================
 
-def run_cycle(known_products):
+def run_cycle(known_products, page):
 
     log("SYSTEM", "Starting scan cycle")
 
@@ -315,7 +301,13 @@ def run_cycle(known_products):
         name = site["name"]
 
         try:
-            soup = scrape_static(site["url"], name) if not site["js"] else scrape_js(site["url"], name)
+            if site["js"]:
+                soup = scrape_js(site["url"], name, page)
+            else:
+                soup = scrape_static(site["url"], name)
+
+            if not soup.find_all("a"):
+                log("WARN", "Empty page (possible block)", name)
 
             links = extract_product_links(
                 soup,
@@ -325,9 +317,6 @@ def run_cycle(known_products):
             )
 
             for url in links:
-
-                if not url:
-                    continue
 
                 key = f"{name}::{url}"
 
@@ -375,17 +364,32 @@ def main():
     discord_ping_startup()
     log("SYSTEM", "🟢 Tracker running")
 
-    while True:
-        start = time.time()
+    with sync_playwright() as p:
 
-        try:
-            run_cycle(known_products)
-        except Exception as e:
-            send_crash(str(e))
-            log("FATAL", str(e))
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"]
+        )
 
-        time.sleep(max(5, POLL_INTERVAL - (time.time() - start)))
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+            viewport={"width": 1280, "height": 720},
+            locale="en-AU",
+            extra_http_headers={"accept-language": "en-AU,en;q=0.9"}
+        )
 
+        page = context.new_page()
+
+        while True:
+            start = time.time()
+
+            try:
+                run_cycle(known_products, page)
+            except Exception as e:
+                send_crash(str(e))
+                log("FATAL", str(e))
+
+            time.sleep(max(5, POLL_INTERVAL - (time.time() - start)))
 
 if __name__ == "__main__":
     main()
