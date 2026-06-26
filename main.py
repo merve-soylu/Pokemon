@@ -17,7 +17,7 @@ load_dotenv()
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 STATE_FILE = "state.json"
 
-POLL_INTERVAL = 75  # slower = fewer blocks
+POLL_INTERVAL = 75
 
 SITES = [
     {
@@ -109,14 +109,9 @@ def load_state():
         cleaned = {}
         for k, v in data.items():
             if isinstance(v, dict):
-                cleaned[k] = {
-                    "status": v.get("status", -1),
-                    "availability": v.get("availability", []),
-                    "matches": v.get("matches", [])
-                }
+                cleaned[k] = v
         return cleaned
-
-    except Exception:
+    except:
         return {}
 
 def save_state(state):
@@ -139,7 +134,11 @@ def send_alert(site, url, targets, availability):
             ]
         }
 
-        requests.post(DISCORD_WEBHOOK, json={"content": "@everyone", "embeds": [embed]}, timeout=10)
+        requests.post(
+            DISCORD_WEBHOOK,
+            json={"content": "@everyone", "embeds": [embed]},
+            timeout=10
+        )
     except:
         pass
 
@@ -147,49 +146,33 @@ def send_alert(site, url, targets, availability):
 # SCRAPING
 # =========================
 
-def scrape_static(url, site):
-    try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-        return BeautifulSoup(r.text, "html.parser")
-    except:
-        return BeautifulSoup("", "html.parser")
-
-
 def scrape_js(url, site, context):
     log("SCRAPE", f"JS render {url}", site)
 
     page = context.new_page()
-
     html = ""
+
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
-        # STEP 1: give initial JS challenge time
-        page.wait_for_timeout(3000)
-
-        # STEP 2: WAIT FOR EITHER REDIRECT OR STABILITY
-        for _ in range(6):  # ~30 seconds max wait loop
+        # allow bot checks to resolve
+        for _ in range(6):
             html = page.content().lower()
 
-            # If we reached real content, break early
-            if "product" in html or "add to cart" in html or "in stock" in html:
+            if any(x in html for x in ["product", "add to cart", "in stock"]):
                 break
 
-            # If still on challenge page, wait a bit more
             if any(x in html for x in [
                 "just a moment",
                 "checking your browser",
                 "cf-browser-verification",
                 "attention required"
             ]):
-                log("WAIT", "Bot check still resolving...", site)
+                log("WAIT", "Bot check running...", site)
                 page.wait_for_timeout(5000)
-
             else:
-                # page changed, likely redirected
                 break
 
-        # STEP 3: final scroll (after redirect likely completed)
         for _ in range(3):
             page.mouse.wheel(0, 2000)
             page.wait_for_timeout(1000)
@@ -197,31 +180,18 @@ def scrape_js(url, site, context):
         html = page.content()
 
     except Exception as e:
-        log("ERROR", f"goto failed: {e}", site)
+        log("ERROR", str(e), site)
 
     finally:
         page.close()
 
-    if not html:
-        return BeautifulSoup("", "html.parser")
-
-    lower = html.lower()
-
-    if any(x in lower for x in [
-        "just a moment",
-        "checking your browser",
-        "cf-browser-verification"
-    ]):
-        log("BLOCKED", "Still on verification page after wait", site)
-        return BeautifulSoup("", "html.parser")
-
-    return BeautifulSoup(html, "html.parser")
+    return BeautifulSoup(html if html else "", "html.parser")
 
 # =========================
-# PRODUCT EXTRACTION
+# LINKS
 # =========================
 
-def extract_product_links(soup, base_url, allowed_prefix, site):
+def extract_product_links(soup, base_url, allowed_prefix):
     links = set()
 
     for a in soup.find_all("a", href=True):
@@ -230,7 +200,7 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
         if not href.startswith(allowed_prefix):
             continue
 
-        if any(x in href for x in ["/product", "/products", "/p/", "/search", "pokemon", "tcg"]):
+        if any(x in href for x in ["/product", "/products", "/p/", "pokemon", "tcg"]):
             links.add(href)
 
     return links
@@ -251,7 +221,6 @@ def check_product(url):
         return [], [], False
 
     soup = BeautifulSoup(r.text, "html.parser")
-
     text = soup.get_text(" ", strip=True).lower()
 
     if any(b in text for b in BLOCKED_KEYWORDS):
@@ -267,45 +236,52 @@ def check_product(url):
     return cache[url]
 
 # =========================
-# MAIN LOOP
+# CYCLE
 # =========================
 
-def run_cycle(state, page):
+def run_cycle(state, context):
 
     for site in SITES:
-
         name = site["name"]
 
-        soup = scrape_js(site["url"], name, page) if site["js"] else scrape_static(site["url"], name)
+        try:
+            soup = scrape_js(site["url"], name, context)
 
-        if not soup.find_all("a"):
-            log("WARN", "Empty or blocked page", name)
-            continue
+            if not soup.find_all("a"):
+                log("WARN", "Empty page / blocked", name)
+                continue
 
-        links = extract_product_links(soup, site["url"], site["allowed_prefix"], name)
+            links = extract_product_links(
+                soup,
+                site["url"],
+                site["allowed_prefix"]
+            )
 
-        for url in links:
+            for url in links:
 
-            key = f"{name}::{url}"
+                key = f"{name}::{url}"
 
-            matches, availability, ok = check_product(url)
+                matches, availability, ok = check_product(url)
 
-            status = max([STATUS_PRIORITY.get(x, -1) for x in availability] + [-1])
+                status = max([STATUS_PRIORITY.get(x, -1) for x in availability] + [-1])
 
-            old = state.get(key)
+                old = state.get(key)
 
-            if old is None or status > old.get("status", -1):
+                if old is None or status > old.get("status", -1):
 
-                state[key] = {
-                    "status": status,
-                    "availability": availability,
-                    "matches": matches
-                }
+                    state[key] = {
+                        "status": status,
+                        "availability": availability,
+                        "matches": matches
+                    }
 
-                if matches and ok:
-                    send_alert(name, url, matches, availability)
+                    if matches and ok:
+                        send_alert(name, url, matches, availability)
 
-        time.sleep(random.uniform(2, 5))  # prevents aggressive bursts
+        except Exception as e:
+            log("ERROR", str(e), name)
+
+        time.sleep(random.uniform(2, 4))
 
     save_state(state)
 
@@ -319,21 +295,25 @@ def main():
 
     with sync_playwright() as p:
 
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"]
+        )
+
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
             viewport={"width": 1280, "height": 720}
         )
 
-        page = context.new_page()
+        log("SYSTEM", "Tracker running")
 
         while True:
             start = time.time()
 
-            run_cycle(state, page)
+            run_cycle(state, context)
 
             sleep_time = max(10, POLL_INTERVAL - (time.time() - start))
-            time.sleep(sleep_time + random.uniform(0, 5))
+            time.sleep(sleep_time + random.uniform(0, 3))
 
 if __name__ == "__main__":
     main()
