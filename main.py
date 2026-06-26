@@ -20,6 +20,12 @@ POLL_INTERVAL = 30
 
 SITES = [
     {
+        "name": "Toymate",
+        "url": "https://toymate.com.au/pokemon/?_bc_fsnf=1&Product+Category=Trading+Cards",
+        "allowed_prefix": "https://toymate.com.au",
+        "js": True
+    },
+    {
         "name": "EB Games",
         "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "allowed_prefix": "https://www.ebgames.com.au",
@@ -63,6 +69,22 @@ AVAILABILITY_KEYWORDS = [
     "reserve now"
 ]
 
+STATUS_PRIORITY = {
+    "notify me": 0,
+    "coming soon": 1,
+    "available now": 2,
+    "pre order": 3,
+    "pre-order": 3,
+    "preorder": 3,
+    "reserve now": 3,
+    "add to cart": 4,
+    "add to basket": 4,
+    "add to bag": 4,
+    "buy now": 5,
+    "order now": 5,
+    "in stock": 6
+}
+
 # =========================
 # LOGGING
 # =========================
@@ -81,12 +103,12 @@ def log(level, msg, site=None):
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
-            return set(json.load(f))
-    return set()
+            return json.load(f)
+    return {}
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
-        json.dump(sorted(list(state)), f, indent=2)
+        json.dump(state, f, indent=2)
 
 # =========================
 # DISCORD
@@ -201,6 +223,14 @@ def extract_product_links(soup, base_url, allowed_prefix, site):
     log("FOUND", f"{len(links)} product links", site)
     return links
 
+def highest_status(statuses):
+    highest = -1
+
+    for s in statuses:
+        highest = max(highest, STATUS_PRIORITY.get(s, -1))
+
+    return highest
+
 # =========================
 # PRODUCT CHECK
 # =========================
@@ -272,17 +302,47 @@ def run_cycle(known_products):
 
                 key = f"{name}::{url}"
 
-                if key in known_products:
-                    log("SEEN", url, name)
-                    continue
-
-                known_products.add(key)
-                log("NEW", url, name)
-
                 matches, availability, booster_ok = check_product_page(url, name)
 
-                if matches and booster_ok:
-                    send_alert(name, url, matches, availability)
+                old = known_products.get(key)
+
+                current_status = highest_status(availability)
+
+                if old is None:
+
+                    log("NEW", url, name)
+
+                    known_products[key] = {
+                        "status": current_status,
+                        "availability": availability,
+                        "matches": matches
+                    }
+
+                    if matches and booster_ok:
+                        send_alert(name, url, matches, availability)
+
+                else:
+
+                    old_status = old.get("status", -1)
+
+                    if current_status > old_status:
+
+                        log(
+                            "UPDATE",
+                            f"{old.get('availability')} -> {availability}",
+                            name
+                        )
+
+                        known_products[key]["status"] = current_status
+                        known_products[key]["availability"] = availability
+                        known_products[key]["matches"] = matches
+
+                        if matches and booster_ok:
+                            send_alert(name, url, matches, availability)
+
+                    else:
+
+                        log("SEEN", url, name)
 
         except Exception as e:
             log("ERROR", str(e), name)
