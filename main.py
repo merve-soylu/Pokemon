@@ -40,7 +40,7 @@ SITES = [
 ]
 
 TARGET_KEYWORDS = [
-    "ascended heroes", "sv11a", "sv11b",
+    "ascended heroes", "ascended hero", "sv11a", "sv11b",
     "30th anniversary", "30th collection",
     "mega forces",
 ]
@@ -236,7 +236,8 @@ def check_product_page(url, site):
         "booster pack",
         "booster box",
         "tcg",
-        "trading card"
+        "trading card",
+        "tin"
     ])
 
     product_cache[url] = (matches, availability, booster_ok)
