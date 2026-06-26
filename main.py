@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
+from playwright_stealth import Stealth
 import random
 from datetime import datetime
 import json
@@ -194,44 +194,19 @@ def scrape_js(url, site):
     log("SCRAPE", f"JS render {url}", site)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
-        )
+        browser = p.chromium.launch(headless=True)
 
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-            viewport={"width": 1280, "height": 720},
-            locale="en-AU",
-            extra_http_headers={
-                "accept-language": "en-AU,en;q=0.9"
-            }
-        )
+        context = Stealth().use_sync(p).__enter__().new_context()
 
         page = context.new_page()
-
-        # IMPORTANT: stealth AFTER page creation
-        stealth_sync(page)
 
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(4000)
-
-            # detect bot blocking early
-            html = page.content()
-            if "cf-browser-verification" in html.lower() or "checking your browser" in html.lower():
-                log("BLOCKED", "Bot verification detected", site)
-                return BeautifulSoup(html, "html.parser")
-
-            # gentle scrolling
-            for _ in range(3):
-                page.mouse.wheel(0, 2000)
-                page.wait_for_timeout(1200)
-
             html = page.content()
 
         except Exception as e:
-            log("ERROR", f"Playwright failed: {e}", site)
+            log("ERROR", str(e), site)
             html = ""
 
         finally:
