@@ -19,7 +19,12 @@ def main():
     try:
         browser_manager.start(SITES)
 
-        send_startup(SITES, POLL_INTERVAL)
+        ok = send_startup(SITES, POLL_INTERVAL)
+
+        if not ok:
+            log("ERROR", "Startup Discord message failed")
+        else:
+            log("DISCORD", "Startup Discord message sent")
 
         log("SYSTEM", "Tracker running")
 
