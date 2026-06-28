@@ -13,12 +13,24 @@ def process_product(state, products_db, site_name, product):
 
     old = state.get(key)
 
+    if product.get("ignored"):
+        state[key] = {
+            "url": url,
+            "title": product.get("title", url),
+            "ignored": True,
+            "ignore_reason": product.get("ignore_reason", "irrelevant"),
+            "interesting": False
+        }
+        return "ignored"
+
     state[key] = {
         "title": product["title"],
         "url": url,
         "status": product["status"],
         "availability": product["availability"],
         "matches": product["matches"],
+        "ignored": False,
+        "interesting": True
     }
 
     products_db.setdefault(product["title"] or url, {})
@@ -29,19 +41,16 @@ def process_product(state, products_db, site_name, product):
         "matches": product["matches"],
     }
 
-    if not product["matches"] or not product["booster_ok"]:
-        return
-
-    if old is None:
+    if old is None or not old.get("interesting"):
         send_product_alert(
             site_name,
             product["title"],
             url,
             product["matches"],
             product["availability"],
-            "NEW PRODUCT"
+            "NEW VALID PRODUCT"
         )
-        return
+        return "new"
 
     old_status = old.get("status", -1)
 
@@ -54,6 +63,25 @@ def process_product(state, products_db, site_name, product):
             product["availability"],
             "STATUS IMPROVED"
         )
+        return "updated"
+
+    return "seen"
+
+def should_check_link(state, site_name, url):
+    key = f"{site_name}::{url}"
+    old = state.get(key)
+
+    if old is None:
+        return True
+
+    if old.get("ignored") is True or old.get("interesting") is False:
+        return False
+
+    if old.get("interesting") is True:
+        return True
+
+    # Old state format fallback: check once and upgrade schema
+    return True
 
 def run_cycle(state, products_db, browser_manager, sites):
     cycle_start = time.time()
@@ -78,20 +106,46 @@ def run_cycle(state, products_db, browser_manager, sites):
             site["allowed_prefix"]
         )
 
-        log("FOUND", f"{len(links)} product/category links", name)
+        new_or_tracked_links = [
+            url for url in links
+            if should_check_link(state, name, url)
+        ]
+
+        skipped = len(links) - len(new_or_tracked_links)
+
+        log("FOUND", f"{len(links)} links found", name)
+        log("SKIP", f"{skipped} ignored/irrelevant links skipped", name)
+        log("CHECK", f"{len(new_or_tracked_links)} links need checking", name)
 
         checked = 0
+        ignored = 0
+        new = 0
+        updated = 0
+        seen = 0
 
-        for url in links:
+        for url in new_or_tracked_links:
             product = check_product_with_page(url, name, page)
 
             if product:
                 checked += 1
-                process_product(state, products_db, name, product)
+                result = process_product(state, products_db, name, product)
+
+                if result == "ignored":
+                    ignored += 1
+                elif result == "new":
+                    new += 1
+                elif result == "updated":
+                    updated += 1
+                elif result == "seen":
+                    seen += 1
 
             time.sleep(random.uniform(0.8, 1.8))
 
-        log("DONE", f"Checked {checked} products", name)
+        log(
+            "DONE",
+            f"Checked {checked} | New {new} | Updated {updated} | Seen {seen} | Ignored {ignored}",
+            name
+        )
 
         time.sleep(random.uniform(3, 6))
 

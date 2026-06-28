@@ -8,7 +8,7 @@ DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
 def discord_post(payload):
     if not DISCORD_WEBHOOK:
-        log("ERROR", "DISCORD_WEBHOOK is missing. Check your .env file.")
+        log("ERROR", "DISCORD_WEBHOOK missing. Check .env file.")
         return False
 
     try:
@@ -31,28 +31,14 @@ def send_startup(sites, poll_interval):
     return discord_post({
         "content": "🟢 Pokémon Tracker Pro is now ONLINE!",
         "embeds": [{
-            "title": "🟢 Pokemon Tracker Online",
+            "title": "🟢 Tracker Started Successfully",
             "color": 0x57F287,
             "fields": [
-                {
-                    "name": "Watching Stores",
-                    "value": names or "None",
-                    "inline": False
-                },
-                {
-                    "name": "Poll Interval",
-                    "value": f"{poll_interval} seconds",
-                    "inline": True
-                },
-                {
-                    "name": "Status",
-                    "value": "✅ Running",
-                    "inline": True
-                }
+                {"name": "Watching Stores", "value": names or "None", "inline": False},
+                {"name": "Poll Interval", "value": f"{poll_interval} seconds", "inline": True},
+                {"name": "Status", "value": "✅ Running", "inline": True}
             ],
-            "footer": {
-                "text": "Pokemon Tracker Pro v2"
-            }
+            "footer": {"text": "Pokemon Tracker Pro v2"}
         }]
     })
 

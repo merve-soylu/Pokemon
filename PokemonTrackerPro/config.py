@@ -1,8 +1,9 @@
 POLL_INTERVAL = 75
 
 STATE_FILE = "state.json"
-SESSION_FILE = "session.json"
 PRODUCTS_FILE = "products.json"
+
+BROWSER_PROFILE_DIR = "browser_profile"
 
 HEADLESS = False
 

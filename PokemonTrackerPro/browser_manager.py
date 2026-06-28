@@ -1,27 +1,20 @@
-import os
 from playwright.sync_api import sync_playwright
-from config import SESSION_FILE, HEADLESS
+from config import BROWSER_PROFILE_DIR, HEADLESS
 from logger import log
 
 class BrowserManager:
     def __init__(self):
         self.playwright = None
-        self.browser = None
         self.context = None
         self.pages = {}
 
     def start(self, sites):
         self.playwright = sync_playwright().start()
 
-        self.browser = self.playwright.chromium.launch(
+        self.context = self.playwright.chromium.launch_persistent_context(
+            user_data_dir=BROWSER_PROFILE_DIR,
             headless=HEADLESS,
-            slow_mo=30
-        )
-
-        storage_state = SESSION_FILE if os.path.exists(SESSION_FILE) else None
-
-        self.context = self.browser.new_context(
-            storage_state=storage_state,
+            slow_mo=40,
             viewport={"width": 1280, "height": 720},
             locale="en-AU",
             user_agent=(
@@ -32,28 +25,20 @@ class BrowserManager:
         )
 
         for site in sites:
-            self.pages[site["name"]] = self.context.new_page()
+            page = self.context.new_page()
+            self.pages[site["name"]] = page
             log("PAGE", "Persistent page created", site["name"])
 
     def get_page(self, site_name):
         return self.pages[site_name]
 
     def save_session(self):
-        try:
-            self.context.storage_state(path=SESSION_FILE)
-        except Exception as e:
-            log("ERROR", f"Failed to save session: {e}")
+        # launch_persistent_context saves cookies/profile automatically
+        pass
 
     def stop(self):
-        self.save_session()
-
         try:
             self.context.close()
-        except:
-            pass
-
-        try:
-            self.browser.close()
         except:
             pass
 
