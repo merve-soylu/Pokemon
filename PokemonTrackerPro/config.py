@@ -13,11 +13,6 @@ TARGET_KEYWORDS = [
     "mega forces",
 ]
 
-BLOCKED_KEYWORDS = [
-    "binder", "sleeves", "playmat",
-    "deck box", "album", "case", "book"
-]
-
 AVAILABILITY_KEYWORDS = [
     "pre-order", "preorder", "pre order",
     "available now", "coming soon",
@@ -39,23 +34,24 @@ POKEMON_RELATED_KEYWORDS = [
     "booster",
 ]
 
-URL_BLOCKED_KEYWORDS = [
-    "binder",
+BLOCKED_KEYWORDS = [
+    "binder", "binders",
+    "sleeve", "sleeves",
+    "playmat", "play mat",
+    "deck box", "deckbox",
     "album",
     "portfolio",
-    "playmat",
-    "sleeves",
-    "sleeve",
-    "deck-box",
-    "deckbox",
-    "deck box",
-    "accessory",
-    "accessories",
-    "coin",
-    "dice",
-    "mat",
     "book",
-    "case",
+]
+
+URL_BLOCKED_KEYWORDS = [
+    "binder", "binders",
+    "sleeve", "sleeves",
+    "playmat", "play-mat", "play mat",
+    "deck-box", "deckbox", "deck box",
+    "album",
+    "portfolio",
+    "book",
 ]
 
 STATUS_PRIORITY = {
@@ -79,25 +75,30 @@ SITES = [
         "name": "Toymate",
         "url": "https://toymate.com.au/pokemon/?_bc_fsnf=1&Product+Category=Trading+Cards",
         "allowed_prefix": "https://toymate.com.au",
+        "enabled": True,
     },
     {
         "name": "EB Games",
         "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "allowed_prefix": "https://www.ebgames.com.au",
+        "enabled": True,
     },
     {
         "name": "Kmart",
         "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
         "allowed_prefix": "https://www.kmart.com.au",
+        "enabled": False,
     },
     {
         "name": "Officeworks",
-        "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
+        "url": "https://www.officeworks.com.au/shop/officeworks/search?q=pokemon%20tcg&view=grid&page=1&sortBy=bestmatch",
         "allowed_prefix": "https://www.officeworks.com.au",
+        "enabled": True,
     },
     {
         "name": "JB HiFi",
         "url": "https://www.jbhifi.com.au/collections/collectibles-merchandise/pokemon-trading-cards",
         "allowed_prefix": "https://www.jbhifi.com.au",
+        "enabled": True,
     },
 ]

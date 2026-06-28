@@ -114,6 +114,9 @@ def run_cycle(state, products_db, browser_manager, sites):
     log("CYCLE", "Starting scan cycle")
 
     for site in sites:
+        if site.get("enabled") is False:
+            log("SKIP", "Store disabled in config", site["name"])
+            continue
         name = site["name"]
         page = browser_manager.get_page(name)
 
