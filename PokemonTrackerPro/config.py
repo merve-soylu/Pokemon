@@ -1,4 +1,6 @@
-POLL_INTERVAL = 75
+import random
+
+POLL_INTERVAL = random.randint(70, 110)
 
 STATE_FILE = "state.json"
 PRODUCTS_FILE = "products.json"
