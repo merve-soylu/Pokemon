@@ -138,11 +138,12 @@ def run_cycle(state, products_db, browser_manager, sites):
             continue
 
         name = site["name"]
-        page = browser_manager.get_page(name)
+        category_page = browser_manager.get_category_page(name)
+        product_page = browser_manager.get_product_page(name)
 
         log("STORE", "Scanning", name)
 
-        soup = scrape_category(site, page)
+        soup = scrape_category(site, category_page)
 
         if not soup.find_all("a"):
             log("WARN", "No links found / blocked / empty page", name)
@@ -192,7 +193,7 @@ def run_cycle(state, products_db, browser_manager, sites):
             product = check_product_with_page(
                 candidate["url"],
                 name,
-                page,
+                product_page,
             )
 
             if product:

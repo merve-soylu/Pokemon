@@ -6,7 +6,8 @@ class BrowserManager:
     def __init__(self):
         self.playwright = None
         self.context = None
-        self.pages = {}
+        self.category_pages = {}
+        self.product_pages = {}
 
     def start(self, sites):
         self.playwright = sync_playwright().start()
@@ -25,15 +26,22 @@ class BrowserManager:
         )
 
         for site in sites:
-            page = self.context.new_page()
-            self.pages[site["name"]] = page
-            log("PAGE", "Persistent page created", site["name"])
+            name = site["name"]
+            self.category_pages[name] = self.context.new_page()
+            self.product_pages[name] = self.context.new_page()
+            log("PAGE", "Category + product pages created", name)
+
+    def get_category_page(self, site_name):
+        return self.category_pages[site_name]
+
+    def get_product_page(self, site_name):
+        return self.product_pages[site_name]
 
     def get_page(self, site_name):
-        return self.pages[site_name]
+        # backwards compatibility
+        return self.get_category_page(site_name)
 
     def save_session(self):
-        # launch_persistent_context saves cookies/profile automatically
         pass
 
     def stop(self):

@@ -25,6 +25,26 @@ VALID_PRODUCT_WORDS = [
     "etb",
 ]
 
+PURCHASE_SELECTORS = [
+    "button",
+    "[role=button]",
+    "input[type=submit]",
+    "input[type=button]",
+    "form[action*=cart]",
+    "form[action*=Cart]",
+    "[class*=add-to-cart]",
+    "[class*=AddToCart]",
+    "[id*=add-to-cart]",
+    "[id*=AddToCart]",
+    "[class*=stock]",
+    "[class*=Stock]",
+    "[id*=stock]",
+    "[id*=Stock]",
+    "[class*=availability]",
+    "[class*=Availability]",
+    "[id*=availability]",
+    "[id*=Availability]",
+]
 
 def normalise(value):
     if not value:
