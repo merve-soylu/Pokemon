@@ -35,6 +35,12 @@ SITES = [
         "js": True
     },
     {
+        "name": "Kmart",
+        "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
+        "allowed_prefix": "https://www.kmart.com.au",
+        "js": True
+    },
+    {
         "name": "Officeworks",
         "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
         "allowed_prefix": "https://www.officeworks.com.au",
