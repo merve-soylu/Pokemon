@@ -22,13 +22,6 @@ LOAD_MORE_TEXTS = [
     "View more",
 ]
 
-NEXT_TEXTS = [
-    "Next",
-    "Next Page",
-    "›",
-    ">",
-]
-
 def is_blocked_html(html):
     lower = html.lower()
     return any(signal in lower for signal in BLOCK_SIGNALS)
@@ -130,8 +123,8 @@ def scrape_category(site, page):
         log("ERROR", str(e), name)
         return BeautifulSoup("", "html.parser")
 
-def extract_product_links(soup, base_url, allowed_prefix):
-    links = set()
+def extract_product_candidates(soup, base_url, allowed_prefix):
+    candidates = {}
 
     for a in soup.find_all("a", href=True):
         href = urljoin(base_url, a["href"]).split("?")[0]
@@ -139,10 +132,21 @@ def extract_product_links(soup, base_url, allowed_prefix):
         if not href.startswith(allowed_prefix):
             continue
 
-        if any(x in href.lower() for x in [
-            "/product", "/products", "/p/", "/item",
-            "pokemon", "tcg", "trading-card", "trading-cards"
-        ]):
-            links.add(href)
+        anchor_text = a.get_text(" ", strip=True)
 
-    return sorted(links)
+        href_lower = href.lower()
+        anchor_lower = anchor_text.lower()
+
+        if not any(x in href_lower or x in anchor_lower for x in [
+            "/product", "/products", "/p/", "/item",
+            "pokemon", "pokémon", "tcg", "trading-card", "trading card",
+            "booster"
+        ]):
+            continue
+
+        candidates[href] = {
+            "url": href,
+            "anchor_text": anchor_text,
+        }
+
+    return list(candidates.values())

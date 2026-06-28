@@ -30,6 +30,33 @@ AVAILABILITY_KEYWORDS = [
     "add to bag",
     "reserve now"
 ]
+POKEMON_RELATED_KEYWORDS = [
+    "pokemon",
+    "pokémon",
+    "tcg",
+    "trading card",
+    "trading-card",
+    "booster",
+]
+
+URL_BLOCKED_KEYWORDS = [
+    "binder",
+    "album",
+    "portfolio",
+    "playmat",
+    "sleeves",
+    "sleeve",
+    "deck-box",
+    "deckbox",
+    "deck box",
+    "accessory",
+    "accessories",
+    "coin",
+    "dice",
+    "mat",
+    "book",
+    "case",
+]
 
 STATUS_PRIORITY = {
     "notify me": 0,
