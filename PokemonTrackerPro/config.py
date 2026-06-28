@@ -14,17 +14,34 @@ TARGET_KEYWORDS = [
 ]
 
 AVAILABILITY_KEYWORDS = [
-    "pre-order", "preorder", "pre order",
-    "available now", "coming soon",
+    # Offline / unavailable
+    "out of stock",
+    "sold out",
     "notify me",
+    "coming soon",
+
+    # In-store only
+    "in-store only",
+    "in store only",
+    "instore only",
+    "in-store",
+    "in store",
+    "click and collect",
+    "collect in store",
+
+    # Online purchasing
+    "pre-order",
+    "preorder",
+    "pre order",
     "add to cart",
+    "add to bag",
     "add to basket",
     "buy now",
-    "in stock",
     "order now",
-    "add to bag",
-    "reserve now"
+    "available now",
+    "in stock",
 ]
+
 POKEMON_RELATED_KEYWORDS = [
     "pokemon",
     "pokémon",
@@ -41,7 +58,9 @@ BLOCKED_KEYWORDS = [
     "deck box", "deckbox",
     "album",
     "portfolio",
-    "book",
+    "book", "pin", 
+    "sticker",
+    "poster"
 ]
 
 URL_BLOCKED_KEYWORDS = [
@@ -51,23 +70,41 @@ URL_BLOCKED_KEYWORDS = [
     "deck-box", "deckbox", "deck box",
     "album",
     "portfolio",
-    "book",
+    "book", "pin", 
+    "sticker",
+    "poster"
 ]
 
 STATUS_PRIORITY = {
-    "notify me": 0,
-    "coming soon": 1,
-    "available now": 2,
-    "pre order": 3,
-    "pre-order": 3,
-    "preorder": 3,
-    "reserve now": 3,
-    "add to cart": 4,
-    "add to basket": 4,
-    "add to bag": 4,
-    "buy now": 5,
-    "order now": 5,
-    "in stock": 6,
+    # Not purchasable
+    "out of stock": 0,
+    "sold out": 0,
+    "notify me": 1,
+
+    # Interesting but not online
+    "coming soon": 2,
+    "in-store only": 2,
+    "in store only": 2,
+    "instore only": 2,
+    "in-store": 2,
+    "in store": 2,
+    "click and collect": 2,
+    "collect in store": 2,
+
+    # Online preorder
+    "available now": 3,
+    "pre order": 4,
+    "pre-order": 4,
+    "preorder": 4,
+
+    # Purchasable
+    "add to cart": 5,
+    "add to bag": 5,
+    "add to basket": 5,
+
+    "buy now": 6,
+    "order now": 6,
+    "in stock": 7,
 }
 
 SITES = [

@@ -7,10 +7,14 @@ from product_checker import check_product_with_page
 from discord_bot import send_product_alert
 from storage import save_json
 from config import STATE_FILE, PRODUCTS_FILE
-from link_filter import classify_link_before_open
+
+
+PING_STATUS_THRESHOLD = 4  # preorder onwards
+
 
 def state_key(site_name, url):
     return f"{site_name}::{url}"
+
 
 def mark_ignored(state, site_name, url, title, reason):
     key = state_key(site_name, url)
@@ -22,6 +26,11 @@ def mark_ignored(state, site_name, url, title, reason):
         "interesting": False,
         "ignore_reason": reason,
     }
+
+
+def should_ping(product):
+    return product.get("status", -1) >= PING_STATUS_THRESHOLD
+
 
 def process_product(state, products_db, site_name, product):
     url = product["url"]
@@ -35,7 +44,7 @@ def process_product(state, products_db, site_name, product):
             site_name,
             url,
             product.get("title", url),
-            product.get("ignore_reason", "irrelevant after opening")
+            product.get("ignore_reason", "irrelevant after opening"),
         )
         return "ignored"
 
@@ -58,32 +67,41 @@ def process_product(state, products_db, site_name, product):
     }
 
     if old is None or not old.get("interesting"):
-        send_product_alert(
-            site_name,
-            product["title"],
-            url,
-            product["matches"],
-            product["availability"],
-            "NEW VALID PRODUCT"
-        )
-        return "new"
+        if should_ping(product):
+            send_product_alert(
+                site_name,
+                product["title"],
+                url,
+                product["matches"],
+                product["availability"],
+                "NEW VALID PRODUCT",
+            )
+            return "new_pinged"
+
+        return "new_tracked_no_ping"
 
     old_status = old.get("status", -1)
 
     if product["status"] > old_status:
-        send_product_alert(
-            site_name,
-            product["title"],
-            url,
-            product["matches"],
-            product["availability"],
-            "STATUS IMPROVED"
-        )
-        return "updated"
+        if should_ping(product):
+            send_product_alert(
+                site_name,
+                product["title"],
+                url,
+                product["matches"],
+                product["availability"],
+                "STATUS IMPROVED",
+            )
+            return "updated_pinged"
+
+        return "updated_no_ping"
 
     return "seen"
 
+
 def should_check_link(state, site_name, url, anchor_text):
+    from link_filter import classify_link_before_open
+
     key = state_key(site_name, url)
     old = state.get(key)
 
@@ -102,11 +120,12 @@ def should_check_link(state, site_name, url, anchor_text):
             site_name,
             url,
             anchor_text or url,
-            classification["ignore_reason"]
+            classification["ignore_reason"],
         )
         return False, classification["ignore_reason"]
 
     return True, "new candidate"
+
 
 def run_cycle(state, products_db, browser_manager, sites):
     cycle_start = time.time()
@@ -117,6 +136,7 @@ def run_cycle(state, products_db, browser_manager, sites):
         if site.get("enabled") is False:
             log("SKIP", "Store disabled in config", site["name"])
             continue
+
         name = site["name"]
         page = browser_manager.get_page(name)
 
@@ -131,7 +151,7 @@ def run_cycle(state, products_db, browser_manager, sites):
         candidates = extract_product_candidates(
             soup,
             site["url"],
-            site["allowed_prefix"]
+            site["allowed_prefix"],
         )
 
         to_check = []
@@ -144,7 +164,7 @@ def run_cycle(state, products_db, browser_manager, sites):
                 state,
                 name,
                 candidate["url"],
-                candidate.get("anchor_text", "")
+                candidate.get("anchor_text", ""),
             )
 
             if should_check:
@@ -162,15 +182,17 @@ def run_cycle(state, products_db, browser_manager, sites):
 
         checked = 0
         ignored = 0
-        new = 0
-        updated = 0
+        new_pinged = 0
+        new_no_ping = 0
+        updated_pinged = 0
+        updated_no_ping = 0
         seen = 0
 
         for candidate in to_check:
             product = check_product_with_page(
                 candidate["url"],
                 name,
-                page
+                page,
             )
 
             if product:
@@ -179,10 +201,14 @@ def run_cycle(state, products_db, browser_manager, sites):
 
                 if result == "ignored":
                     ignored += 1
-                elif result == "new":
-                    new += 1
-                elif result == "updated":
-                    updated += 1
+                elif result == "new_pinged":
+                    new_pinged += 1
+                elif result == "new_tracked_no_ping":
+                    new_no_ping += 1
+                elif result == "updated_pinged":
+                    updated_pinged += 1
+                elif result == "updated_no_ping":
+                    updated_no_ping += 1
                 elif result == "seen":
                     seen += 1
 
@@ -190,8 +216,16 @@ def run_cycle(state, products_db, browser_manager, sites):
 
         log(
             "DONE",
-            f"Checked {checked} | New {new} | Updated {updated} | Seen {seen} | Ignored after open {ignored}",
-            name
+            (
+                f"Checked {checked} | "
+                f"New pinged {new_pinged} | "
+                f"New no ping {new_no_ping} | "
+                f"Updated pinged {updated_pinged} | "
+                f"Updated no ping {updated_no_ping} | "
+                f"Seen {seen} | "
+                f"Ignored after open {ignored}"
+            ),
+            name,
         )
 
         time.sleep(random.uniform(3, 6))

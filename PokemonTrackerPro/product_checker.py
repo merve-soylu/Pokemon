@@ -1,7 +1,12 @@
 import re
 from bs4 import BeautifulSoup
 
-from config import TARGET_KEYWORDS, BLOCKED_KEYWORDS, AVAILABILITY_KEYWORDS, STATUS_PRIORITY
+from config import (
+    TARGET_KEYWORDS,
+    BLOCKED_KEYWORDS,
+    AVAILABILITY_KEYWORDS,
+    STATUS_PRIORITY,
+)
 from scraper import is_blocked_html, wait_for_challenge, human_pause
 from logger import log
 
@@ -16,7 +21,6 @@ VALID_PRODUCT_WORDS = [
     "tin",
     "mini tin",
     "tcg",
-    "trading card",
     "elite trainer",
     "etb",
 ]
@@ -42,12 +46,12 @@ def phrase_match(text, phrase):
     return re.search(pattern, text) is not None
 
 
-def has_any_phrase(text, keywords):
-    return any(phrase_match(text, keyword) for keyword in keywords)
-
-
 def matched_phrases(text, keywords):
     return [keyword for keyword in keywords if phrase_match(text, keyword)]
+
+
+def has_any_phrase(text, keywords):
+    return len(matched_phrases(text, keywords)) > 0
 
 
 def highest_status(availability):
@@ -63,6 +67,98 @@ def get_product_identity_text(soup, url):
     )
 
     return title, f"{title} {headings}"
+
+
+def get_product_area_text(soup):
+    """
+    Only search product/purchase-specific areas for availability.
+    This avoids false statuses from recommended products, footers,
+    menus, scripts, and unrelated page content.
+    """
+    selectors = [
+        "h1",
+        "h2",
+        "button",
+        "[role=button]",
+        "form[action*=cart]",
+        "form[action*=Cart]",
+        "[class*=stock]",
+        "[class*=Stock]",
+        "[class*=availability]",
+        "[class*=Availability]",
+        "[class*=available]",
+        "[class*=Available]",
+        "[class*=purchase]",
+        "[class*=Purchase]",
+        "[class*=product-form]",
+        "[class*=ProductForm]",
+        "[class*=add-to-cart]",
+        "[class*=AddToCart]",
+        "[id*=stock]",
+        "[id*=Stock]",
+        "[id*=availability]",
+        "[id*=Availability]",
+        "[id*=product-form]",
+        "[id*=ProductForm]",
+        "[id*=add-to-cart]",
+        "[id*=AddToCart]",
+    ]
+
+    parts = []
+
+    for selector in selectors:
+        for element in soup.select(selector):
+            text = element.get_text(" ", strip=True)
+            if text:
+                parts.append(text)
+
+            aria = element.get("aria-label")
+            if aria:
+                parts.append(aria)
+
+            value = element.get("value")
+            if value:
+                parts.append(value)
+
+            title = element.get("title")
+            if title:
+                parts.append(title)
+
+    return " ".join(parts)
+
+
+def extract_availability(soup):
+    product_area_text = normalise(get_product_area_text(soup))
+
+    availability = matched_phrases(product_area_text, AVAILABILITY_KEYWORDS)
+
+    has_in_store_only = has_any_phrase(product_area_text, [
+        "in-store only",
+        "in store only",
+        "instore only",
+        "in-store",
+        "in store",
+        "click and collect",
+        "collect in store",
+    ])
+
+    has_online_purchase = has_any_phrase(product_area_text, [
+        "pre-order",
+        "preorder",
+        "pre order",
+        "add to cart",
+        "add to bag",
+        "add to basket",
+        "buy now",
+        "order now",
+        "in stock",
+        "available now",
+    ])
+
+    if has_in_store_only and not has_online_purchase:
+        return ["in-store only"]
+
+    return availability
 
 
 def check_product_with_page(url, site, page):
@@ -91,12 +187,9 @@ def check_product_with_page(url, site, page):
                 "title": title,
                 "url": url,
                 "ignored": True,
-                "ignore_reason": "not pokemon related"
+                "ignore_reason": "not pokemon related",
             }
 
-        # IMPORTANT:
-        # Blocked keywords are ONLY checked against title/headings,
-        # not the whole page body. The body often contains recommendations like sleeves/binders.
         blocked_matches = matched_phrases(product_identity_lower, BLOCKED_KEYWORDS)
 
         if blocked_matches:
@@ -104,22 +197,20 @@ def check_product_with_page(url, site, page):
                 "title": title,
                 "url": url,
                 "ignored": True,
-                "ignore_reason": f"blocked keyword in title/headings: {', '.join(blocked_matches)}"
+                "ignore_reason": f"blocked keyword in title/headings: {', '.join(blocked_matches)}",
             }
 
         matches = matched_phrases(full_text_lower, TARGET_KEYWORDS)
-        availability = matched_phrases(full_text_lower, AVAILABILITY_KEYWORDS)
+        availability = extract_availability(soup)
 
         booster_ok = has_any_phrase(product_identity_lower, VALID_PRODUCT_WORDS)
 
-        # fallback: sometimes title is weak but the page has product text clearly saying TCG/tin/booster
         if not booster_ok:
             booster_ok = has_any_phrase(full_text_lower, [
                 "booster pack",
                 "booster box",
                 "mini tin",
-                "pokemon tcg",
-                "trading card game",
+                "tin"
             ])
 
         if not matches:
@@ -127,7 +218,7 @@ def check_product_with_page(url, site, page):
                 "title": title,
                 "url": url,
                 "ignored": True,
-                "ignore_reason": "no target keyword"
+                "ignore_reason": "no target keyword",
             }
 
         if not booster_ok:
@@ -135,7 +226,7 @@ def check_product_with_page(url, site, page):
                 "title": title,
                 "url": url,
                 "ignored": True,
-                "ignore_reason": "not booster/tcg/tin product"
+                "ignore_reason": "not booster/tcg/tin product",
             }
 
         return {
