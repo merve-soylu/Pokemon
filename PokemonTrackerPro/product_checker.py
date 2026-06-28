@@ -21,6 +21,7 @@ VALID_PRODUCT_WORDS = [
     "tin",
     "mini tin",
     "tcg",
+    "trading card",
     "elite trainer",
     "etb",
 ]
@@ -46,6 +47,7 @@ PURCHASE_SELECTORS = [
     "[id*=Availability]",
 ]
 
+
 def normalise(value):
     if not value:
         return ""
@@ -54,14 +56,12 @@ def normalise(value):
     value = value.replace("-", " ")
     value = value.replace("_", " ")
     value = value.replace("%20", " ")
-
     return " ".join(value.split())
 
 
 def phrase_match(text, phrase):
     text = normalise(text)
     phrase = normalise(phrase)
-
     pattern = r"(?<![a-z0-9])" + re.escape(phrase) + r"(?![a-z0-9])"
     return re.search(pattern, text) is not None
 
@@ -71,7 +71,7 @@ def matched_phrases(text, keywords):
 
 
 def has_any_phrase(text, keywords):
-    return len(matched_phrases(text, keywords)) > 0
+    return bool(matched_phrases(text, keywords))
 
 
 def highest_status(availability):
@@ -90,7 +90,7 @@ def get_product_identity_text(soup, url):
 
 
 def is_hidden_or_disabled(element):
-    style = (element.get("style") or "").lower()
+    style = (element.get("style") or "").lower().replace(" ", "")
     classes = " ".join(element.get("class") or []).lower()
 
     if element.has_attr("hidden"):
@@ -102,10 +102,10 @@ def is_hidden_or_disabled(element):
     if element.get("aria-hidden") == "true":
         return True
 
-    if "display:none" in style.replace(" ", ""):
+    if "display:none" in style:
         return True
 
-    if "visibility:hidden" in style.replace(" ", ""):
+    if "visibility:hidden" in style:
         return True
 
     if any(x in classes for x in ["hidden", "disabled", "is-disabled", "visually-hidden"]):
@@ -114,17 +114,38 @@ def is_hidden_or_disabled(element):
     return False
 
 
+def extract_visible_text_from_element(element):
+    parts = []
+
+    text = element.get_text(" ", strip=True)
+    if text:
+        parts.append(text)
+
+    for attr in [
+        "aria-label",
+        "value",
+        "title",
+        "data-button-text",
+        "data-label",
+        "data-testid",
+        "name",
+    ]:
+        value = element.get(attr)
+        if value:
+            parts.append(value)
+
+    return " ".join(parts)
+
+
 def get_purchase_area_texts(soup):
     texts = []
 
     for selector in PURCHASE_SELECTORS:
         for element in soup.select(selector):
-
             if is_hidden_or_disabled(element):
                 continue
 
             text = extract_visible_text_from_element(element)
-
             if text:
                 texts.append(text)
 
@@ -182,12 +203,11 @@ def extract_availability(soup):
     unavailable_found = [s for s in found if s in unavailable_statuses]
     offline_found = [s for s in found if s in offline_only_statuses]
 
-    # Online purchase always wins if it appears in visible/enabled controls.
+    # Visible/enabled online purchase controls win.
     if online_found:
         best = max(online_found, key=lambda x: STATUS_PRIORITY.get(x, -1))
         return [best]
 
-    # If no online purchase action exists, then trust unavailable/offline signals.
     if unavailable_found:
         best = max(unavailable_found, key=lambda x: STATUS_PRIORITY.get(x, -1))
         return [best]
@@ -246,6 +266,7 @@ def check_product_with_page(url, site, page):
 
         if not booster_ok:
             booster_ok = has_any_phrase(full_text_lower, [
+                "booster"
                 "booster pack",
                 "booster box",
                 "mini tin",
@@ -265,7 +286,7 @@ def check_product_with_page(url, site, page):
                 "title": title,
                 "url": url,
                 "ignored": True,
-                "ignore_reason": "not booster/tcg/tin product",
+                "ignore_reason": "not booster/tin product",
             }
 
         return {
