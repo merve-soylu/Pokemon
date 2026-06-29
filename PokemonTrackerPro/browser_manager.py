@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright
 from config import BROWSER_PROFILE_DIR, HEADLESS
 from logger import log
 
+
 class BrowserManager:
     def __init__(self):
         self.playwright = None
@@ -27,8 +28,8 @@ class BrowserManager:
                 log("SKIP", "Store disabled, not opening Chromium pages", name)
                 continue
 
-            if site.get("engine") == "selenium_firefox":
-                log("SKIP", "Store uses Selenium Firefox, not opening Chromium pages", name)
+            if site.get("engine") != "playwright":
+                log("SKIP", f"{site.get('engine')} store, not opening Chromium pages", name)
                 continue
 
             self.category_pages[name] = self.context.new_page()

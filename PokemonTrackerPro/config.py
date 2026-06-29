@@ -1,14 +1,18 @@
 import random
 
-POLL_INTERVAL = random.randint(70, 110)
+POLL_INTERVAL_MIN = 70
+POLL_INTERVAL_MAX = 110
 
 STATE_FILE = "state.json"
 PRODUCTS_FILE = "products.json"
 
 BROWSER_PROFILE_DIR = "browser_profile"
-FIREFOX_PROFILE_DIR = "/home/merve/.mozilla/firefox/0ld0yusc.ebgames-profile"
-
 HEADLESS = False
+
+API_HOST = "127.0.0.1"
+API_PORT = 8765
+
+FIREFOX_EB_URL = "https://www.ebgames.com.au/featured/pokemon-trading-card-game"
 
 TARGET_KEYWORDS = [
     "ascended heroes", "ascended hero", "sv11a", "sv11b",
@@ -16,23 +20,37 @@ TARGET_KEYWORDS = [
     "mega forces",
 ]
 
+BLOCKED_KEYWORDS = [
+    "binder", "binders",
+    "sleeve", "sleeves",
+    "playmat", "play mat",
+    "deck box", "deckbox",
+    "album",
+    "portfolio",
+    "book",
+]
+
+URL_BLOCKED_KEYWORDS = BLOCKED_KEYWORDS
+
+POKEMON_RELATED_KEYWORDS = [
+    "pokemon",
+    "pokémon",
+    "tcg",
+    "trading card",
+    "trading-card",
+    "booster",
+]
+
 AVAILABILITY_KEYWORDS = [
-    # Offline / unavailable
     "out of stock",
     "sold out",
     "notify me",
     "coming soon",
-
-    # In-store only
     "in-store only",
     "in store only",
     "instore only",
-    "in-store",
-    "in store",
     "click and collect",
     "collect in store",
-
-    # Online purchasing
     "pre-order",
     "preorder",
     "pre order",
@@ -45,70 +63,42 @@ AVAILABILITY_KEYWORDS = [
     "in stock",
 ]
 
-POKEMON_RELATED_KEYWORDS = [
-    "pokemon",
-    "pokémon",
-    "tcg",
-    "trading card",
-    "trading-card",
-    "booster",
-]
-
-BLOCKED_KEYWORDS = [
-    "binder", "binders",
-    "sleeve", "sleeves",
-    "playmat", "play mat",
-    "deck box", "deckbox",
-    "album",
-    "portfolio",
-    "book", "pin", 
-    "sticker",
-    "poster"
-]
-
-URL_BLOCKED_KEYWORDS = [
-    "binder", "binders",
-    "sleeve", "sleeves",
-    "playmat", "play-mat", "play mat",
-    "deck-box", "deckbox", "deck box",
-    "album",
-    "portfolio",
-    "book", "pin", 
-    "sticker",
-    "poster"
-]
-
 STATUS_PRIORITY = {
-    # Not purchasable
     "out of stock": 0,
     "sold out": 0,
     "notify me": 1,
-
-    # Interesting but not online
     "coming soon": 2,
     "in-store only": 2,
     "in store only": 2,
     "instore only": 2,
-    "in-store": 2,
-    "in store": 2,
     "click and collect": 2,
     "collect in store": 2,
-
-    # Online preorder
     "available now": 3,
     "pre order": 4,
     "pre-order": 4,
     "preorder": 4,
-
-    # Purchasable
     "add to cart": 5,
     "add to bag": 5,
     "add to basket": 5,
-
     "buy now": 6,
     "order now": 6,
     "in stock": 7,
 }
+
+VALID_PRODUCT_WORDS = [
+    "booster",
+    "booster pack",
+    "booster box",
+    "blister",
+    "bundle",
+    "box",
+    "tin",
+    "mini tin",
+    "tcg",
+    "trading card",
+    "elite trainer",
+    "etb",
+]
 
 SITES = [
     {
@@ -120,21 +110,21 @@ SITES = [
     },
     {
         "name": "EB Games",
-        "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
+        "url": FIREFOX_EB_URL,
         "allowed_prefix": "https://www.ebgames.com.au",
         "enabled": True,
-        "engine": "selenium_firefox",
+        "engine": "firefox_extension",
     },
     {
         "name": "Kmart",
         "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
         "allowed_prefix": "https://www.kmart.com.au",
         "enabled": True,
-        "engine": "selenium_firefox",
+        "engine": "kmart_selenium",
     },
     {
         "name": "Officeworks",
-        "url": "https://www.officeworks.com.au/shop/officeworks/search?q=pokemon%20tcg&view=grid&page=1&sortBy=bestmatch",
+        "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
         "allowed_prefix": "https://www.officeworks.com.au",
         "enabled": True,
         "engine": "playwright",

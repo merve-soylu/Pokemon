@@ -8,8 +8,7 @@ from discord_bot import send_product_alert
 from storage import save_json
 from config import STATE_FILE, PRODUCTS_FILE
 
-
-PING_STATUS_THRESHOLD = 4  # preorder onwards
+PING_STATUS_THRESHOLD = 4
 
 
 def state_key(site_name, url):
@@ -17,9 +16,7 @@ def state_key(site_name, url):
 
 
 def mark_ignored(state, site_name, url, title, reason):
-    key = state_key(site_name, url)
-
-    state[key] = {
+    state[state_key(site_name, url)] = {
         "url": url,
         "title": title or url,
         "ignored": True,
@@ -35,7 +32,6 @@ def should_ping(product):
 def process_product(state, products_db, site_name, product):
     url = product["url"]
     key = state_key(site_name, url)
-
     old = state.get(key)
 
     if product.get("ignored"):
@@ -78,7 +74,7 @@ def process_product(state, products_db, site_name, product):
             )
             return "new_pinged"
 
-        return "new_tracked_no_ping"
+        return "new_no_ping"
 
     old_status = old.get("status", -1)
 
@@ -115,19 +111,77 @@ def should_check_link(state, site_name, url, anchor_text):
     classification = classify_link_before_open(url, anchor_text)
 
     if not classification["should_open"]:
-        mark_ignored(
-            state,
-            site_name,
-            url,
-            anchor_text or url,
-            classification["ignore_reason"],
-        )
+        mark_ignored(state, site_name, url, anchor_text or url, classification["ignore_reason"])
         return False, classification["ignore_reason"]
 
     return True, "new candidate"
 
 
-def run_cycle(state, products_db, browser_manager, sites, eb_firefox=None):
+def scan_candidates(state, products_db, site_name, candidates, check_func):
+    to_check = []
+    skipped = 0
+    tracked = 0
+    new_candidates = 0
+
+    for candidate in candidates:
+        should_check, reason = should_check_link(
+            state,
+            site_name,
+            candidate["url"],
+            candidate.get("anchor_text", ""),
+        )
+
+        if should_check:
+            to_check.append(candidate)
+            if reason == "tracked product":
+                tracked += 1
+            else:
+                new_candidates += 1
+        else:
+            skipped += 1
+
+    log("FOUND", f"{len(candidates)} candidates", site_name)
+    log("SKIP", f"{skipped} skipped before opening", site_name)
+    log("CHECK", f"{len(to_check)} to open ({tracked} tracked, {new_candidates} new)", site_name)
+
+    stats = {
+        "checked": 0,
+        "ignored": 0,
+        "new_pinged": 0,
+        "new_no_ping": 0,
+        "updated_pinged": 0,
+        "updated_no_ping": 0,
+        "seen": 0,
+    }
+
+    for candidate in to_check:
+        product = check_func(candidate["url"])
+
+        if product:
+            stats["checked"] += 1
+            result = process_product(state, products_db, site_name, product)
+
+            if result in stats:
+                stats[result] += 1
+
+        time.sleep(random.uniform(0.8, 1.8))
+
+    log(
+        "DONE",
+        (
+            f"Checked {stats['checked']} | "
+            f"New pinged {stats['new_pinged']} | "
+            f"New no ping {stats['new_no_ping']} | "
+            f"Updated pinged {stats['updated_pinged']} | "
+            f"Updated no ping {stats['updated_no_ping']} | "
+            f"Seen {stats['seen']} | "
+            f"Ignored {stats['ignored']}"
+        ),
+        site_name,
+    )
+
+
+def run_cycle(state, products_db, browser_manager, sites, kmart_engine=None):
     cycle_start = time.time()
 
     log("CYCLE", "Starting scan cycle")
@@ -138,96 +192,28 @@ def run_cycle(state, products_db, browser_manager, sites, eb_firefox=None):
             continue
 
         name = site["name"]
+        engine = site.get("engine", "playwright")
+
+        if engine == "firefox_extension":
+            log("SKIP", "Handled by Firefox extension + local API", name)
+            continue
 
         log("STORE", "Scanning", name)
 
-        # =========================
-        # EB GAMES — SELENIUM FIREFOX
-        # =========================
-
-        if site.get("engine") == "selenium_firefox":
-            if eb_firefox is None:
-                log("ERROR", "EB Firefox engine missing", name)
+        if engine == "kmart_selenium":
+            if kmart_engine is None:
+                log("ERROR", "Kmart Selenium engine missing", name)
                 continue
 
-            candidates = eb_firefox.scrape_category(site)
-
-            to_check = []
-            skipped = 0
-            tracked = 0
-            new_candidates = 0
-
-            for candidate in candidates:
-                should_check, reason = should_check_link(
-                    state,
-                    name,
-                    candidate["url"],
-                    candidate.get("anchor_text", ""),
-                )
-
-                if should_check:
-                    to_check.append(candidate)
-                    if reason == "tracked product":
-                        tracked += 1
-                    else:
-                        new_candidates += 1
-                else:
-                    skipped += 1
-
-            log("FOUND", f"{len(candidates)} candidates", name)
-            log("SKIP", f"{skipped} skipped before opening", name)
-            log("CHECK", f"{len(to_check)} to open ({tracked} tracked, {new_candidates} new)", name)
-
-            checked = 0
-            ignored = 0
-            new_pinged = 0
-            new_no_ping = 0
-            updated_pinged = 0
-            updated_no_ping = 0
-            seen = 0
-
-            for candidate in to_check:
-                product = eb_firefox.check_product(candidate["url"], name)
-
-                if product:
-                    checked += 1
-                    result = process_product(state, products_db, name, product)
-
-                    if result == "ignored":
-                        ignored += 1
-                    elif result == "new_pinged":
-                        new_pinged += 1
-                    elif result == "new_tracked_no_ping":
-                        new_no_ping += 1
-                    elif result == "updated_pinged":
-                        updated_pinged += 1
-                    elif result == "updated_no_ping":
-                        updated_no_ping += 1
-                    elif result == "seen":
-                        seen += 1
-
-                time.sleep(random.uniform(1.5, 3.5))
-
-            log(
-                "DONE",
-                (
-                    f"Checked {checked} | "
-                    f"New pinged {new_pinged} | "
-                    f"New no ping {new_no_ping} | "
-                    f"Updated pinged {updated_pinged} | "
-                    f"Updated no ping {updated_no_ping} | "
-                    f"Seen {seen} | "
-                    f"Ignored after open {ignored}"
-                ),
+            candidates = kmart_engine.scrape_category(site)
+            scan_candidates(
+                state,
+                products_db,
                 name,
+                candidates,
+                lambda url: kmart_engine.check_product(url, name),
             )
-
-            time.sleep(random.uniform(3, 6))
             continue
-
-        # =========================
-        # NORMAL STORES — PLAYWRIGHT
-        # =========================
 
         category_page = browser_manager.get_category_page(name)
         product_page = browser_manager.get_product_page(name)
@@ -244,78 +230,12 @@ def run_cycle(state, products_db, browser_manager, sites, eb_firefox=None):
             site["allowed_prefix"],
         )
 
-        to_check = []
-        skipped = 0
-        tracked = 0
-        new_candidates = 0
-
-        for candidate in candidates:
-            should_check, reason = should_check_link(
-                state,
-                name,
-                candidate["url"],
-                candidate.get("anchor_text", ""),
-            )
-
-            if should_check:
-                to_check.append(candidate)
-                if reason == "tracked product":
-                    tracked += 1
-                else:
-                    new_candidates += 1
-            else:
-                skipped += 1
-
-        log("FOUND", f"{len(candidates)} candidates", name)
-        log("SKIP", f"{skipped} skipped before opening", name)
-        log("CHECK", f"{len(to_check)} to open ({tracked} tracked, {new_candidates} new)", name)
-
-        checked = 0
-        ignored = 0
-        new_pinged = 0
-        new_no_ping = 0
-        updated_pinged = 0
-        updated_no_ping = 0
-        seen = 0
-
-        for candidate in to_check:
-            product = check_product_with_page(
-                candidate["url"],
-                name,
-                product_page,
-            )
-
-            if product:
-                checked += 1
-                result = process_product(state, products_db, name, product)
-
-                if result == "ignored":
-                    ignored += 1
-                elif result == "new_pinged":
-                    new_pinged += 1
-                elif result == "new_tracked_no_ping":
-                    new_no_ping += 1
-                elif result == "updated_pinged":
-                    updated_pinged += 1
-                elif result == "updated_no_ping":
-                    updated_no_ping += 1
-                elif result == "seen":
-                    seen += 1
-
-            time.sleep(random.uniform(0.8, 1.8))
-
-        log(
-            "DONE",
-            (
-                f"Checked {checked} | "
-                f"New pinged {new_pinged} | "
-                f"New no ping {new_no_ping} | "
-                f"Updated pinged {updated_pinged} | "
-                f"Updated no ping {updated_no_ping} | "
-                f"Seen {seen} | "
-                f"Ignored after open {ignored}"
-            ),
+        scan_candidates(
+            state,
+            products_db,
             name,
+            candidates,
+            lambda url: check_product_with_page(url, name, product_page),
         )
 
         time.sleep(random.uniform(3, 6))

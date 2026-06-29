@@ -2,35 +2,26 @@ import time
 import random
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service
-
-from config import FIREFOX_PROFILE_DIR
 from logger import log
 from scraper import extract_product_candidates
 from product_checker import parse_product_soup
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
 
+PROFILE = "/home/pi/.mozilla/firefox/0ld0yusc.ebgames-profile"
 
-class EBGamesFirefox:
-    def __init__(self):
-        self.driver = None
+def start(self):
+    options = Options()
 
-    def start(self):
-        service = Service("/usr/local/bin/geckodriver")
-        
-        options = Options()
-        options.profile = FIREFOX_PROFILE_DIR
+    options.add_argument("-profile")
+    options.add_argument(PROFILE)
 
-        # Visible Firefox
-        options.add_argument("--width=1280")
-        options.add_argument("--height=720")
+    options.add_argument("--width=1280")
+    options.add_argument("--height=720")
 
-        self.driver = webdriver.Firefox(
-            service=service,
-            options=options)
-        log("SELENIUM", "Firefox started for EB Games")
+    self.driver = webdriver.Firefox(options=options)
+
+    log("SELENIUM", "Firefox started using ebgames-profile")
 
     def stop(self):
         try:

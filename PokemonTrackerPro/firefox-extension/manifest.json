@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "name": "EB Games Pokemon Tracker Bridge",
+  "version": "1.0",
+  "description": "Scans EB Games in normal Firefox and sends products to local PokemonTrackerPro.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "https://www.ebgames.com.au/*",
+    "http://127.0.0.1:8765/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.ebgames.com.au/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
