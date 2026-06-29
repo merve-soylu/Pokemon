@@ -10,19 +10,23 @@ from selenium.webdriver.firefox.options import Options
 
 PROFILE = "/home/pi/.mozilla/firefox/0ld0yusc.ebgames-profile"
 
-def start(self):
-    options = Options()
+class KmartSelenium:
 
-    options.add_argument("-profile")
-    options.add_argument(PROFILE)
+    def __init__(self):
+        self.driver = None
 
-    options.add_argument("--width=1280")
-    options.add_argument("--height=720")
+    def start(self):
+        options = Options()
 
-    self.driver = webdriver.Firefox(options=options)
+        options.add_argument("-profile")
+        options.add_argument(PROFILE)
 
-    log("SELENIUM", "Firefox started using ebgames-profile")
+        options.add_argument("--width=1280")
+        options.add_argument("--height=720")
 
+        self.driver = webdriver.Firefox(options=options)
+
+        log("SELENIUM", "Firefox started using ebgames-profile")
     def stop(self):
         try:
             if self.driver:
