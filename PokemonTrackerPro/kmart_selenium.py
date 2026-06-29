@@ -61,7 +61,7 @@ class KmartSelenium:
             soup = self.page_soup()
 
             if not soup.find_all("a"):
-                log("WARN", "No EB links found", name)
+                log("WARN", "No Kmart links found", name)
                 return []
 
             candidates = extract_product_candidates(
@@ -70,11 +70,11 @@ class KmartSelenium:
                 site["allowed_prefix"]
             )
 
-            log("FOUND", f"{len(candidates)} EB candidates", name)
+            log("FOUND", f"{len(candidates)} Kmart candidates", name)
             return candidates
 
         except Exception as e:
-            log("ERROR", f"EB category failed: {e}", name)
+            log("ERROR", f"Kmart category failed: {e}", name)
             return []
 
     def check_product(self, url, site_name):
@@ -89,5 +89,5 @@ class KmartSelenium:
             return parse_product_soup(url, site_name, soup)
 
         except Exception as e:
-            log("ERROR", f"EB product failed: {e}", site_name)
+            log("ERROR", f"Kmart product failed: {e}", site_name)
             return None
