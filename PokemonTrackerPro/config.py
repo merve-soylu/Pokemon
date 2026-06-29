@@ -110,10 +110,10 @@ SITES = [
     },
     {
         "name": "EB Games",
-        "url": FIREFOX_EB_URL,
+        "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "allowed_prefix": "https://www.ebgames.com.au",
         "enabled": True,
-        "engine": "firefox_extension",
+        "engine": "kmart_selenium",
     },
     {
         "name": "Kmart",
