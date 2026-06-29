@@ -7,6 +7,7 @@ from scraper import extract_product_candidates
 from product_checker import parse_product_soup
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 
 PROFILE = "/home/pi/.mozilla/firefox/0ld0yusc.ebgames-profile"
 
@@ -24,9 +25,15 @@ class KmartSelenium:
         options.add_argument("--width=1280")
         options.add_argument("--height=720")
 
-        self.driver = webdriver.Firefox(options=options)
+        service = Service("/usr/local/bin/geckodriver")
 
-        log("SELENIUM", "Firefox started using ebgames-profile")
+        self.driver = webdriver.Firefox(
+            service=service,
+            options=options
+        )
+
+    log("SELENIUM", "Firefox started using saved profile")
+
     def stop(self):
         try:
             if self.driver:
