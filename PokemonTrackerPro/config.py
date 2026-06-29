@@ -124,7 +124,7 @@ SITES = [
     },
     {
         "name": "Officeworks",
-        "url": "https://www.officeworks.com.au/shop/officeworks/c/education/educational-toys--puzzles-games/kids-educational-toys-games",
+        "url": "https://www.officeworks.com.au/shop/officeworks/search?q=pokemon&view=grid&page=1&sortBy=bestmatch",
         "allowed_prefix": "https://www.officeworks.com.au",
         "enabled": True,
         "engine": "playwright",
