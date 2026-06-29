@@ -25,7 +25,7 @@ BLOCKED_KEYWORDS = [
     "sleeve", "sleeves",
     "playmat", "play mat",
     "deck box", "deckbox",
-    "album",
+    "album",    "pin"
     "portfolio",
     "book",
 ]
