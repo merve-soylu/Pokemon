@@ -1,3 +1,18 @@
-2026/06/29-14:05:27.759 111b Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Local Storage/leveldb/MANIFEST-000001
-2026/06/29-14:05:27.778 111b Recovering log #51
-2026/06/29-14:05:27.780 111b Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Local Storage/leveldb/000051.log 
+2026/06/29-21:15:37.991 17f8 Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/06/29-21:15:38.017 17f8 Recovering log #51
+2026/06/29-21:15:38.022 17f8 Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Local Storage/leveldb/000051.log 
+2026/06/29-21:16:38.035 17fa Level-0 table #55: started
+2026/06/29-21:16:38.045 17fa Level-0 table #55: 14396 bytes OK
+2026/06/29-21:16:38.051 17fa Delete type=0 #51
+2026/06/29-21:23:20.590 17f8 Level-0 table #57: started
+2026/06/29-21:23:20.616 17f8 Level-0 table #57: 46744 bytes OK
+2026/06/29-21:23:20.647 17f8 Delete type=0 #54
+2026/06/29-21:23:20.651 17f8 Compacting 4@0 + 1@1 files
+2026/06/29-21:23:20.720 17f8 Generated table #58@0: 163 keys, 145557 bytes
+2026/06/29-21:23:20.720 17f8 Compacted 4@0 + 1@1 files => 145557 bytes
+2026/06/29-21:23:20.730 17f8 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/06/29-21:23:20.736 17f8 Delete type=2 #49
+2026/06/29-21:23:20.737 17f8 Delete type=2 #55
+2026/06/29-21:23:20.738 17f8 Delete type=2 #57
+2026/06/29-21:23:20.738 17f8 Delete type=2 #52
+2026/06/29-21:23:20.738 17f8 Delete type=2 #47

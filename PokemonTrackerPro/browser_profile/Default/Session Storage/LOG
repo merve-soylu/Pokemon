@@ -1,3 +1,6 @@
-2026/06/29-14:05:28.056 111b Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Session Storage/MANIFEST-000001
-2026/06/29-14:05:28.058 111b Recovering log #19
-2026/06/29-14:05:28.061 111b Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Session Storage/000019.log 
+2026/06/29-21:15:38.299 17f8 Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Session Storage/MANIFEST-000001
+2026/06/29-21:15:38.301 17f8 Recovering log #19
+2026/06/29-21:15:38.303 17f8 Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Session Storage/000019.log 
+2026/06/29-21:20:34.695 17fa Level-0 table #23: started
+2026/06/29-21:20:34.734 17fa Level-0 table #23: 13711 bytes OK
+2026/06/29-21:20:34.763 17fa Delete type=0 #19

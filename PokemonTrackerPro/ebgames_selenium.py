@@ -18,6 +18,8 @@ class EBGamesFirefox:
         self.driver = None
 
     def start(self):
+        service = Service("/usr/local/bin/geckodriver")
+        
         options = Options()
         options.profile = FIREFOX_PROFILE_DIR
 
@@ -25,7 +27,9 @@ class EBGamesFirefox:
         options.add_argument("--width=1280")
         options.add_argument("--height=720")
 
-        self.driver = webdriver.Firefox(options=options)
+        self.driver = webdriver.Firefox(
+            service=service,
+            options=options)
         log("SELENIUM", "Firefox started for EB Games")
 
     def stop(self):
