@@ -91,7 +91,6 @@ VALID_PRODUCT_WORDS = [
     "booster box",
     "blister",
     "bundle",
-    "box",
     "tin",
     "mini tin",
     "etb",

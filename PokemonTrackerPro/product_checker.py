@@ -17,13 +17,26 @@ VALID_PRODUCT_WORDS = [
     "booster box",
     "blister",
     "bundle",
-    "box",
     "tin",
     "mini tin",
-    "tcg",
-    "trading card",
-    "elite trainer",
-    "etb",
+]
+
+BUY_BOX_SELECTORS = [
+    "[class*=productView]",
+    "[class*=ProductView]",
+    "[class*=product-detail]",
+    "[class*=ProductDetail]",
+    "[class*=product-info]",
+    "[class*=ProductInfo]",
+    "[class*=product-main]",
+    "[class*=ProductMain]",
+    "[class*=product-form]",
+    "[class*=ProductForm]",
+    "[class*=buy-box]",
+    "[class*=BuyBox]",
+    "[id*=product]",
+    "[id*=Product]",
+    "main",
 ]
 
 PURCHASE_SELECTORS = [
@@ -33,10 +46,6 @@ PURCHASE_SELECTORS = [
     "input[type=button]",
     "form[action*=cart]",
     "form[action*=Cart]",
-    "[class*=add-to-cart]",
-    "[class*=AddToCart]",
-    "[id*=add-to-cart]",
-    "[id*=AddToCart]",
     "[class*=stock]",
     "[class*=Stock]",
     "[id*=stock]",
@@ -45,6 +54,10 @@ PURCHASE_SELECTORS = [
     "[class*=Availability]",
     "[id*=availability]",
     "[id*=Availability]",
+    "[class*=add-to-cart]",
+    "[class*=AddToCart]",
+    "[id*=add-to-cart]",
+    "[id*=AddToCart]",
 ]
 
 
@@ -95,19 +108,14 @@ def is_hidden_or_disabled(element):
 
     if element.has_attr("hidden"):
         return True
-
     if element.has_attr("disabled"):
         return True
-
     if element.get("aria-hidden") == "true":
         return True
-
     if "display:none" in style:
         return True
-
     if "visibility:hidden" in style:
         return True
-
     if any(x in classes for x in ["hidden", "disabled", "is-disabled", "visually-hidden"]):
         return True
 
@@ -137,17 +145,32 @@ def extract_visible_text_from_element(element):
     return " ".join(parts)
 
 
+def get_buy_box(soup):
+    for selector in BUY_BOX_SELECTORS:
+        element = soup.select_one(selector)
+        if element:
+            return element
+
+    return soup
+
+
 def get_purchase_area_texts(soup):
+    buy_box = get_buy_box(soup)
     texts = []
 
     for selector in PURCHASE_SELECTORS:
-        for element in soup.select(selector):
+        for element in buy_box.select(selector):
             if is_hidden_or_disabled(element):
                 continue
 
             text = extract_visible_text_from_element(element)
             if text:
                 texts.append(text)
+
+    if not texts:
+        fallback = buy_box.get_text(" ", strip=True)
+        if fallback and len(fallback) < 2500:
+            texts.append(fallback)
 
     seen = set()
     unique = []
@@ -193,8 +216,6 @@ def extract_availability(soup):
         "in-store only",
         "in store only",
         "instore only",
-        "in-store",
-        "in store",
         "click and collect",
         "collect in store",
     ]
@@ -203,21 +224,16 @@ def extract_availability(soup):
     unavailable_found = [s for s in found if s in unavailable_statuses]
     offline_found = [s for s in found if s in offline_only_statuses]
 
-    # Visible/enabled online purchase controls win.
     if online_found:
-        best = max(online_found, key=lambda x: STATUS_PRIORITY.get(x, -1))
-        return [best]
+        return [max(online_found, key=lambda x: STATUS_PRIORITY.get(x, -1))]
 
     if unavailable_found:
-        best = max(unavailable_found, key=lambda x: STATUS_PRIORITY.get(x, -1))
-        return [best]
+        return [max(unavailable_found, key=lambda x: STATUS_PRIORITY.get(x, -1))]
 
     if offline_found:
-        best = max(offline_found, key=lambda x: STATUS_PRIORITY.get(x, -1))
-        return [best]
+        return [max(offline_found, key=lambda x: STATUS_PRIORITY.get(x, -1))]
 
-    best = max(found, key=lambda x: STATUS_PRIORITY.get(x, -1))
-    return [best]
+    return [max(found, key=lambda x: STATUS_PRIORITY.get(x, -1))]
 
 
 def check_product_with_page(url, site, page):
@@ -272,15 +288,7 @@ def parse_product_soup(url, site, soup):
     booster_ok = has_any_phrase(product_identity_lower, VALID_PRODUCT_WORDS)
 
     if not booster_ok:
-        booster_ok = has_any_phrase(full_text_lower, [
-            "booster",
-            "booster pack",
-            "booster box",
-            "mini tin",
-            "tin",
-            "pokemon tcg",
-            "trading card game",
-        ])
+        booster_ok = has_any_phrase(full_text_lower, VALID_PRODUCT_WORDS)
 
     if not matches:
         return {

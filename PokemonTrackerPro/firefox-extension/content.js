@@ -5,7 +5,6 @@ const TARGET_KEYWORDS = [
   "sv11b",
   "30th anniversary",
   "30th collection",
-  "mega forces"
 ];
 
 const BLOCKED_KEYWORDS = [
@@ -19,7 +18,8 @@ const BLOCKED_KEYWORDS = [
   "deckbox",
   "album",
   "portfolio",
-  "book"
+  "book",
+  "pin",
 ];
 
 const VALID_PRODUCT_WORDS = [
@@ -28,12 +28,8 @@ const VALID_PRODUCT_WORDS = [
   "booster box",
   "blister",
   "bundle",
-  "box",
   "tin",
   "mini tin",
-  "tcg",
-  "trading card",
-  "elite trainer",
   "etb"
 ];
 
@@ -105,52 +101,151 @@ function bestStatus(statuses) {
   return Math.max(...statuses.map(s => STATUS_PRIORITY[s] ?? -1));
 }
 
+function isHiddenOrDisabled(el) {
+  const styleAttr = (el.getAttribute("style") || "").toLowerCase().replace(/\s+/g, "");
+  const classAttr = (el.getAttribute("class") || "").toLowerCase();
+
+  if (el.hasAttribute("hidden")) return true;
+  if (el.hasAttribute("disabled")) return true;
+  if (el.getAttribute("aria-hidden") === "true") return true;
+  if (styleAttr.includes("display:none")) return true;
+  if (styleAttr.includes("visibility:hidden")) return true;
+
+  if (
+    classAttr.includes("hidden") ||
+    classAttr.includes("disabled") ||
+    classAttr.includes("is-disabled") ||
+    classAttr.includes("visually-hidden")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function getBuyBox(doc) {
+  const selectors = [
+    "[class*=productView]",
+    "[class*=ProductView]",
+    "[class*=product-detail]",
+    "[class*=ProductDetail]",
+    "[class*=product-info]",
+    "[class*=ProductInfo]",
+    "[class*=product-main]",
+    "[class*=ProductMain]",
+    "[class*=product-form]",
+    "[class*=ProductForm]",
+    "[class*=buy-box]",
+    "[class*=BuyBox]",
+    "[id*=product]",
+    "[id*=Product]",
+    "main"
+  ];
+
+  for (const selector of selectors) {
+    const el = doc.querySelector(selector);
+    if (el) return el;
+  }
+
+  return doc.body || doc;
+}
+
 function extractAvailability(doc) {
+  const buyBox = getBuyBox(doc);
+
   const selectors = [
     "button",
     "[role=button]",
     "input[type=submit]",
     "input[type=button]",
+    "form[action*=cart]",
+    "form[action*=Cart]",
     "[class*=stock]",
+    "[class*=Stock]",
     "[class*=availability]",
+    "[class*=Availability]",
     "[id*=stock]",
-    "[id*=availability]"
+    "[id*=Stock]",
+    "[id*=availability]",
+    "[id*=Availability]",
+    "[class*=add-to-cart]",
+    "[class*=AddToCart]",
+    "[id*=add-to-cart]",
+    "[id*=AddToCart]"
   ];
 
   let text = "";
 
   for (const selector of selectors) {
-    doc.querySelectorAll(selector).forEach(el => {
-      const style = window.getComputedStyle(el);
-      if (style.display === "none" || style.visibility === "hidden") return;
-      if (el.disabled) return;
+    buyBox.querySelectorAll(selector).forEach(el => {
+      if (isHiddenOrDisabled(el)) return;
 
-      text += " " + (el.innerText || "");
+      text += " " + (el.innerText || el.textContent || "");
       text += " " + (el.value || "");
       text += " " + (el.getAttribute("aria-label") || "");
       text += " " + (el.getAttribute("title") || "");
+      text += " " + (el.getAttribute("data-button-text") || "");
+      text += " " + (el.getAttribute("data-label") || "");
     });
+  }
+
+  if (!text.trim()) {
+    const fallback = buyBox.innerText || buyBox.textContent || "";
+    if (fallback.length < 2500) {
+      text = fallback;
+    }
   }
 
   const found = matched(text, AVAILABILITY_KEYWORDS);
 
+  if (!found.length) return [];
+
   const online = found.filter(s =>
-    ["in stock", "buy now", "order now", "add to cart", "add to bag", "add to basket", "pre-order", "preorder", "pre order", "available now"].includes(s)
+    [
+      "in stock",
+      "buy now",
+      "order now",
+      "add to cart",
+      "add to bag",
+      "add to basket",
+      "pre-order",
+      "preorder",
+      "pre order",
+      "available now"
+    ].includes(s)
   );
 
   const unavailable = found.filter(s =>
-    ["out of stock", "sold out", "notify me"].includes(s)
+    [
+      "out of stock",
+      "sold out",
+      "notify me"
+    ].includes(s)
   );
 
   const offline = found.filter(s =>
-    ["in-store only", "in store only", "instore only", "click and collect", "collect in store"].includes(s)
+    [
+      "in-store only",
+      "in store only",
+      "instore only",
+      "click and collect",
+      "collect in store"
+    ].includes(s)
   );
 
-  if (online.length) return [online.sort((a, b) => STATUS_PRIORITY[b] - STATUS_PRIORITY[a])[0]];
-  if (unavailable.length) return [unavailable.sort((a, b) => STATUS_PRIORITY[b] - STATUS_PRIORITY[a])[0]];
-  if (offline.length) return [offline.sort((a, b) => STATUS_PRIORITY[b] - STATUS_PRIORITY[a])[0]];
+  if (online.length) {
+    return [online.sort((a, b) => STATUS_PRIORITY[b] - STATUS_PRIORITY[a])[0]];
+  }
 
-  return found.length ? [found[0]] : [];
+  if (unavailable.length) {
+    return [unavailable.sort((a, b) => STATUS_PRIORITY[b] - STATUS_PRIORITY[a])[0]];
+  }
+
+  if (offline.length) {
+    return [offline.sort((a, b) => STATUS_PRIORITY[b] - STATUS_PRIORITY[a])[0]];
+  }
+
+  return [found.sort((a, b) => STATUS_PRIORITY[b] - STATUS_PRIORITY[a])[0]];
 }
 
 function extractCandidates() {
@@ -178,11 +273,13 @@ async function checkProduct(candidate) {
   const html = await res.text();
 
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const text = norm(doc.body.innerText || "");
+  const text = norm(doc.body?.innerText || doc.body?.textContent || "");
 
   const title =
     doc.querySelector("h1")?.innerText ||
+    doc.querySelector("h1")?.textContent ||
     doc.querySelector("title")?.innerText ||
+    doc.querySelector("title")?.textContent ||
     candidate.title ||
     candidate.url;
 
@@ -206,7 +303,7 @@ async function checkProduct(candidate) {
 }
 
 async function runEBScan() {
-  const pageText = norm(document.body.innerText || "");
+  const pageText = norm(document.body?.innerText || "");
 
   if (
     pageText.includes("verify you are human") ||
