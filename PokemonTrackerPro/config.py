@@ -94,26 +94,23 @@ VALID_PRODUCT_WORDS = [
     "box",
     "tin",
     "mini tin",
-    "tcg",
-    "trading card",
-    "elite trainer",
     "etb",
 ]
 
 SITES = [
+    {
+        "name": "EB Games",
+        "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
+        "allowed_prefix": "https://www.ebgames.com.au",
+        "enabled": True,
+        "engine": "firefox_extension"
+    },
     {
         "name": "Toymate",
         "url": "https://toymate.com.au/pokemon/?_bc_fsnf=1&Product+Category=Trading+Cards",
         "allowed_prefix": "https://toymate.com.au",
         "enabled": True,
         "engine": "playwright",
-    },
-    {
-        "name": "EB Games",
-        "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
-        "allowed_prefix": "https://www.ebgames.com.au",
-        "enabled": True,
-        "engine": "kmart_selenium",
     },
     {
         "name": "Kmart",
