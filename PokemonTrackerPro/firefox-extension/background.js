@@ -15,9 +15,13 @@ browser.alarms.onAlarm.addListener(async () => {
   const tabs = await browser.tabs.query({ url: "https://www.ebgames.com.au/*" });
 
   if (tabs.length > 0) {
-    browser.tabs.reload(tabs[0].id);
+    await browser.tabs.update(tabs[0].id, {
+      url: CATEGORY_URL
+    });
   } else {
-    browser.tabs.create({ url: CATEGORY_URL });
+    await browser.tabs.create({
+      url: CATEGORY_URL
+    });
   }
 });
 

@@ -17,6 +17,11 @@ VALID_PRODUCT_WORDS = [
     "booster box",
     "blister",
     "bundle",
+    "pokemon",
+    "pokemon tcg",
+    "pokemon-tcg",
+    "trading card",
+    "trading-card",
     "tin",
     "mini tin",
 ]

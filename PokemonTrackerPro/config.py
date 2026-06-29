@@ -27,7 +27,7 @@ BLOCKED_KEYWORDS = [
     "deck box", "deckbox",
     "album",    "pin"
     "portfolio",
-    "book",
+    "book", "accessory", "sticker"
 ]
 
 URL_BLOCKED_KEYWORDS = BLOCKED_KEYWORDS
@@ -36,6 +36,7 @@ POKEMON_RELATED_KEYWORDS = [
     "pokemon",
     "pokémon",
     "tcg",
+    "pokemon tcg"
     "trading card",
     "trading-card",
     "booster",

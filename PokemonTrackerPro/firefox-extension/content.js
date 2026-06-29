@@ -20,6 +20,8 @@ const BLOCKED_KEYWORDS = [
   "portfolio",
   "book",
   "pin",
+  "sticker",
+  "accessory"
 ];
 
 const VALID_PRODUCT_WORDS = [
@@ -30,6 +32,8 @@ const VALID_PRODUCT_WORDS = [
   "bundle",
   "tin",
   "mini tin",
+  "pokemon",
+  "pokemon tcg",
   "etb"
 ];
 
