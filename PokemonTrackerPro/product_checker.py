@@ -234,71 +234,76 @@ def check_product_with_page(url, site, page):
             return None
 
         soup = BeautifulSoup(page.content(), "html.parser")
-
-        full_text = soup.get_text(" ", strip=True)
-        full_text_lower = normalise(full_text)
-
-        title, product_identity_text = get_product_identity_text(soup, url)
-        product_identity_lower = normalise(product_identity_text)
-
-        if not has_any_phrase(full_text_lower, ["pokemon", "pokémon"]):
-            return {
-                "title": title,
-                "url": url,
-                "ignored": True,
-                "ignore_reason": "not pokemon related",
-            }
-
-        blocked_matches = matched_phrases(product_identity_lower, BLOCKED_KEYWORDS)
-
-        if blocked_matches:
-            return {
-                "title": title,
-                "url": url,
-                "ignored": True,
-                "ignore_reason": f"blocked keyword in title/headings: {', '.join(blocked_matches)}",
-            }
-
-        matches = matched_phrases(full_text_lower, TARGET_KEYWORDS)
-        availability = extract_availability(soup)
-
-        booster_ok = has_any_phrase(product_identity_lower, VALID_PRODUCT_WORDS)
-
-        if not booster_ok:
-            booster_ok = has_any_phrase(full_text_lower, [
-                "booster"
-                "booster pack",
-                "booster box",
-                "mini tin",
-                "tin"
-            ])
-
-        if not matches:
-            return {
-                "title": title,
-                "url": url,
-                "ignored": True,
-                "ignore_reason": "no target keyword",
-            }
-
-        if not booster_ok:
-            return {
-                "title": title,
-                "url": url,
-                "ignored": True,
-                "ignore_reason": "not booster/tin product",
-            }
-
-        return {
-            "title": title,
-            "url": url,
-            "ignored": False,
-            "matches": matches,
-            "availability": availability,
-            "status": highest_status(availability),
-            "booster_ok": booster_ok,
-        }
+        return parse_product_soup(url, site, soup)
 
     except Exception as e:
         log("ERROR", f"Product check failed: {e}", site)
         return None
+
+
+def parse_product_soup(url, site, soup):
+    full_text = soup.get_text(" ", strip=True)
+    full_text_lower = normalise(full_text)
+
+    title, product_identity_text = get_product_identity_text(soup, url)
+    product_identity_lower = normalise(product_identity_text)
+
+    if not has_any_phrase(full_text_lower, ["pokemon", "pokémon"]):
+        return {
+            "title": title,
+            "url": url,
+            "ignored": True,
+            "ignore_reason": "not pokemon related",
+        }
+
+    blocked_matches = matched_phrases(product_identity_lower, BLOCKED_KEYWORDS)
+
+    if blocked_matches:
+        return {
+            "title": title,
+            "url": url,
+            "ignored": True,
+            "ignore_reason": f"blocked keyword in title/headings: {', '.join(blocked_matches)}",
+        }
+
+    matches = matched_phrases(full_text_lower, TARGET_KEYWORDS)
+    availability = extract_availability(soup)
+
+    booster_ok = has_any_phrase(product_identity_lower, VALID_PRODUCT_WORDS)
+
+    if not booster_ok:
+        booster_ok = has_any_phrase(full_text_lower, [
+            "booster",
+            "booster pack",
+            "booster box",
+            "mini tin",
+            "tin",
+            "pokemon tcg",
+            "trading card game",
+        ])
+
+    if not matches:
+        return {
+            "title": title,
+            "url": url,
+            "ignored": True,
+            "ignore_reason": "no target keyword",
+        }
+
+    if not booster_ok:
+        return {
+            "title": title,
+            "url": url,
+            "ignored": True,
+            "ignore_reason": "not booster/tcg/tin product",
+        }
+
+    return {
+        "title": title,
+        "url": url,
+        "ignored": False,
+        "matches": matches,
+        "availability": availability,
+        "status": highest_status(availability),
+        "booster_ok": booster_ok,
+    }

@@ -6,6 +6,7 @@ STATE_FILE = "state.json"
 PRODUCTS_FILE = "products.json"
 
 BROWSER_PROFILE_DIR = "browser_profile"
+FIREFOX_PROFILE_DIR = "/home/merve/.mozilla/firefox/ebgames-profile"
 
 HEADLESS = False
 
@@ -115,29 +116,34 @@ SITES = [
         "url": "https://toymate.com.au/pokemon/?_bc_fsnf=1&Product+Category=Trading+Cards",
         "allowed_prefix": "https://toymate.com.au",
         "enabled": True,
+        "engine": "playwright",
     },
     {
         "name": "EB Games",
         "url": "https://www.ebgames.com.au/featured/pokemon-trading-card-game",
         "allowed_prefix": "https://www.ebgames.com.au",
         "enabled": True,
+        "engine": "selenium_firefox",
     },
     {
         "name": "Kmart",
         "url": "https://www.kmart.com.au/category/toys/pokemon-trading-cards/",
         "allowed_prefix": "https://www.kmart.com.au",
-        "enabled": False,
+        "enabled": True,
+        "engine": "selenium_firefox",
     },
     {
         "name": "Officeworks",
         "url": "https://www.officeworks.com.au/shop/officeworks/search?q=pokemon%20tcg&view=grid&page=1&sortBy=bestmatch",
         "allowed_prefix": "https://www.officeworks.com.au",
         "enabled": True,
+        "engine": "playwright",
     },
     {
         "name": "JB HiFi",
         "url": "https://www.jbhifi.com.au/collections/collectibles-merchandise/pokemon-trading-cards",
         "allowed_prefix": "https://www.jbhifi.com.au",
         "enabled": True,
+        "engine": "playwright",
     },
 ]

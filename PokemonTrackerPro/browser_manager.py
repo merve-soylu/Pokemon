@@ -12,9 +12,9 @@ class BrowserManager:
     def start(self, sites):
         self.playwright = sync_playwright().start()
 
-        self.context = self.playwright.firefox.launch_persistent_context(
-            user_data_dir="firefox_profile",
-            headless=False,
+        self.context = self.playwright.chromium.launch_persistent_context(
+            user_data_dir=BROWSER_PROFILE_DIR,
+            headless=HEADLESS,
             slow_mo=40,
             viewport={"width": 1280, "height": 720},
             locale="en-AU",
@@ -22,6 +22,15 @@ class BrowserManager:
 
         for site in sites:
             name = site["name"]
+
+            if site.get("enabled") is False:
+                log("SKIP", "Store disabled, not opening Chromium pages", name)
+                continue
+
+            if site.get("engine") == "selenium_firefox":
+                log("SKIP", "Store uses Selenium Firefox, not opening Chromium pages", name)
+                continue
+
             self.category_pages[name] = self.context.new_page()
             self.product_pages[name] = self.context.new_page()
             log("PAGE", "Category + product pages created", name)
@@ -31,10 +40,6 @@ class BrowserManager:
 
     def get_product_page(self, site_name):
         return self.product_pages[site_name]
-
-    def get_page(self, site_name):
-        # backwards compatibility
-        return self.get_category_page(site_name)
 
     def save_session(self):
         pass

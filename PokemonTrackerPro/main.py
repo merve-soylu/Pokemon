@@ -7,6 +7,7 @@ from storage import load_json
 from discord_bot import send_startup, send_crash
 from browser_manager import BrowserManager
 from tracker import run_cycle
+from ebgames_selenium import EBGamesFirefox
 
 def main():
     banner()
@@ -15,9 +16,11 @@ def main():
     products_db = load_json(PRODUCTS_FILE, {})
 
     browser_manager = BrowserManager()
+    eb_firefox = EBGamesFirefox()
 
     try:
         browser_manager.start(SITES)
+        eb_firefox.start()
 
         ok = send_startup(SITES, POLL_INTERVAL)
 
@@ -32,7 +35,7 @@ def main():
             start = time.time()
 
             try:
-                run_cycle(state, products_db, browser_manager, SITES)
+                run_cycle(state, products_db, browser_manager, SITES, eb_firefox)
             except Exception as e:
                 log("FATAL", str(e))
                 send_crash(str(e))
@@ -44,6 +47,7 @@ def main():
             time.sleep(sleep_time)
 
     finally:
+        eb_firefox.stop()
         browser_manager.stop()
 
 if __name__ == "__main__":

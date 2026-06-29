@@ -127,7 +127,7 @@ def should_check_link(state, site_name, url, anchor_text):
     return True, "new candidate"
 
 
-def run_cycle(state, products_db, browser_manager, sites):
+def run_cycle(state, products_db, browser_manager, sites, eb_firefox=None):
     cycle_start = time.time()
 
     log("CYCLE", "Starting scan cycle")
@@ -138,10 +138,99 @@ def run_cycle(state, products_db, browser_manager, sites):
             continue
 
         name = site["name"]
-        category_page = browser_manager.get_category_page(name)
-        product_page = browser_manager.get_product_page(name)
 
         log("STORE", "Scanning", name)
+
+        # =========================
+        # EB GAMES — SELENIUM FIREFOX
+        # =========================
+
+        if site.get("engine") == "selenium_firefox":
+            if eb_firefox is None:
+                log("ERROR", "EB Firefox engine missing", name)
+                continue
+
+            candidates = eb_firefox.scrape_category(site)
+
+            to_check = []
+            skipped = 0
+            tracked = 0
+            new_candidates = 0
+
+            for candidate in candidates:
+                should_check, reason = should_check_link(
+                    state,
+                    name,
+                    candidate["url"],
+                    candidate.get("anchor_text", ""),
+                )
+
+                if should_check:
+                    to_check.append(candidate)
+                    if reason == "tracked product":
+                        tracked += 1
+                    else:
+                        new_candidates += 1
+                else:
+                    skipped += 1
+
+            log("FOUND", f"{len(candidates)} candidates", name)
+            log("SKIP", f"{skipped} skipped before opening", name)
+            log("CHECK", f"{len(to_check)} to open ({tracked} tracked, {new_candidates} new)", name)
+
+            checked = 0
+            ignored = 0
+            new_pinged = 0
+            new_no_ping = 0
+            updated_pinged = 0
+            updated_no_ping = 0
+            seen = 0
+
+            for candidate in to_check:
+                product = eb_firefox.check_product(candidate["url"], name)
+
+                if product:
+                    checked += 1
+                    result = process_product(state, products_db, name, product)
+
+                    if result == "ignored":
+                        ignored += 1
+                    elif result == "new_pinged":
+                        new_pinged += 1
+                    elif result == "new_tracked_no_ping":
+                        new_no_ping += 1
+                    elif result == "updated_pinged":
+                        updated_pinged += 1
+                    elif result == "updated_no_ping":
+                        updated_no_ping += 1
+                    elif result == "seen":
+                        seen += 1
+
+                time.sleep(random.uniform(1.5, 3.5))
+
+            log(
+                "DONE",
+                (
+                    f"Checked {checked} | "
+                    f"New pinged {new_pinged} | "
+                    f"New no ping {new_no_ping} | "
+                    f"Updated pinged {updated_pinged} | "
+                    f"Updated no ping {updated_no_ping} | "
+                    f"Seen {seen} | "
+                    f"Ignored after open {ignored}"
+                ),
+                name,
+            )
+
+            time.sleep(random.uniform(3, 6))
+            continue
+
+        # =========================
+        # NORMAL STORES — PLAYWRIGHT
+        # =========================
+
+        category_page = browser_manager.get_category_page(name)
+        product_page = browser_manager.get_product_page(name)
 
         soup = scrape_category(site, category_page)
 
