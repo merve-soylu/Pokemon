@@ -6,7 +6,7 @@ STATE_FILE = "state.json"
 PRODUCTS_FILE = "products.json"
 
 BROWSER_PROFILE_DIR = "browser_profile"
-FIREFOX_PROFILE_DIR = "/home/merve/.mozilla/firefox/ebgames-profile"
+FIREFOX_PROFILE_DIR = "/home/merve/.mozilla/firefox/0ld0yusc.ebgames-profile"
 
 HEADLESS = False
 

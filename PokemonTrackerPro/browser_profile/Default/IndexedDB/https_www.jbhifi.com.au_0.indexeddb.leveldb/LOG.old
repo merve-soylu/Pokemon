@@ -1,0 +1,7 @@
+2026/06/28-21:02:06.473 6e90 Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/IndexedDB/https_www.jbhifi.com.au_0.indexeddb.leveldb/MANIFEST-000001
+2026/06/28-21:02:06.475 6e90 Recovering log #4
+2026/06/28-21:02:06.476 6e90 Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/IndexedDB/https_www.jbhifi.com.au_0.indexeddb.leveldb/000004.log 
+2026/06/28-21:02:26.027 6e90 Level-0 table #8: started
+2026/06/28-21:02:26.033 6e90 Level-0 table #8: 4431 bytes OK
+2026/06/28-21:02:26.038 6e90 Delete type=0 #4
+2026/06/28-21:02:26.039 6e8f Manual compaction at level-0 from '\x00\x03\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x04\x00\x00\x00' @ 0 : 0; will stop at (end)
