@@ -17,7 +17,6 @@ FIREFOX_EB_URL = "https://www.ebgames.com.au/featured/pokemon-trading-card-game"
 TARGET_KEYWORDS = [
     "ascended heroes", "ascended hero", "sv11a", "sv11b",
     "30th anniversary", "30th collection",
-    "mega forces",
 ]
 
 BLOCKED_KEYWORDS = [
@@ -33,13 +32,24 @@ BLOCKED_KEYWORDS = [
 URL_BLOCKED_KEYWORDS = BLOCKED_KEYWORDS
 
 POKEMON_RELATED_KEYWORDS = [
+    "booster",
+    "booster pack",
+    "booster box",
+    "blister",
+    "bundle",
     "pokemon",
-    "pokémon",
-    "tcg",
-    "pokemon tcg"
+    "pokemon tcg",
+    "pokemon-tcg",
+    "Pokemon TCG",
     "trading card",
     "trading-card",
-    "booster",
+    "pokemon trading card",
+    "pokemon-trading-card",
+    "pokemon-trading-card-game",
+    "trading card game",
+    "trading-card-game",
+    "tin",
+    "mini tin",
 ]
 
 AVAILABILITY_KEYWORDS = [

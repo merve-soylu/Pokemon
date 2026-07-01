@@ -1,3 +1,57 @@
-2026/06/29-21:14:42.429 1743 Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Session Storage/MANIFEST-000001
-2026/06/29-21:14:42.433 1743 Recovering log #19
-2026/06/29-21:14:42.439 1743 Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Session Storage/000019.log 
+2026/06/30-01:25:48.629 7a15 Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Session Storage/MANIFEST-000001
+2026/06/30-01:25:48.635 7a15 Recovering log #25
+2026/06/30-01:25:48.668 7a15 Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/Session Storage/000025.log 
+2026/06/30-01:30:25.983 7a17 Level-0 table #28: started
+2026/06/30-01:30:26.010 7a17 Level-0 table #28: 16199 bytes OK
+2026/06/30-01:30:26.039 7a17 Delete type=0 #25
+2026/06/30-01:30:26.040 7a17 Compacting 4@0 + 1@1 files
+2026/06/30-01:30:26.068 7a17 Generated table #29@0: 577 keys, 21516 bytes
+2026/06/30-01:30:26.072 7a17 Compacted 4@0 + 1@1 files => 21516 bytes
+2026/06/30-01:30:26.082 7a17 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/06/30-01:30:26.090 7a17 Delete type=2 #23
+2026/06/30-01:30:26.096 7a17 Delete type=2 #28
+2026/06/30-01:30:26.096 7a17 Delete type=2 #20
+2026/06/30-01:30:26.098 7a17 Delete type=2 #25
+2026/06/30-01:30:26.098 7a17 Delete type=2 #17
+2026/06/30-05:34:05.054 7a17 Level-0 table #31: started
+2026/06/30-05:34:05.078 7a17 Level-0 table #31: 13821 bytes OK
+2026/06/30-05:34:05.095 7a17 Delete type=0 #27
+2026/06/30-09:50:05.053 7a15 Level-0 table #33: started
+2026/06/30-09:50:05.089 7a15 Level-0 table #33: 11788 bytes OK
+2026/06/30-09:50:05.121 7a15 Delete type=0 #30
+2026/06/30-14:01:05.043 7a17 Level-0 table #35: started
+2026/06/30-14:01:05.051 7a17 Level-0 table #35: 11880 bytes OK
+2026/06/30-14:01:05.057 7a17 Delete type=0 #32
+2026/06/30-18:18:05.043 7a17 Level-0 table #37: started
+2026/06/30-18:18:05.057 7a17 Level-0 table #37: 11969 bytes OK
+2026/06/30-18:18:05.067 7a17 Delete type=0 #34
+2026/06/30-18:18:05.069 7a17 Compacting 4@0 + 1@1 files
+2026/06/30-18:18:05.084 7a17 Generated table #38@0: 979 keys, 35927 bytes
+2026/06/30-18:18:05.084 7a17 Compacted 4@0 + 1@1 files => 35927 bytes
+2026/06/30-18:18:05.089 7a17 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/06/30-18:18:05.091 7a17 Delete type=2 #37
+2026/06/30-18:18:05.091 7a17 Delete type=2 #29
+2026/06/30-18:18:05.091 7a17 Delete type=2 #31
+2026/06/30-18:18:05.091 7a17 Delete type=2 #33
+2026/06/30-18:18:05.091 7a17 Delete type=2 #35
+2026/06/30-22:34:05.053 7a17 Level-0 table #40: started
+2026/06/30-22:34:05.062 7a17 Level-0 table #40: 11851 bytes OK
+2026/06/30-22:34:05.071 7a17 Delete type=0 #36
+2026/07/01-02:59:05.052 7a17 Level-0 table #42: started
+2026/07/01-02:59:05.073 7a17 Level-0 table #42: 11889 bytes OK
+2026/07/01-02:59:05.091 7a17 Delete type=0 #39
+2026/07/01-07:14:05.049 7a17 Level-0 table #44: started
+2026/07/01-07:14:05.065 7a17 Level-0 table #44: 11797 bytes OK
+2026/07/01-07:14:05.086 7a17 Delete type=0 #41
+2026/07/01-11:35:05.045 7a17 Level-0 table #46: started
+2026/07/01-11:35:05.077 7a17 Level-0 table #46: 11842 bytes OK
+2026/07/01-11:35:05.103 7a17 Delete type=0 #43
+2026/07/01-11:35:05.108 7a17 Compacting 4@0 + 1@1 files
+2026/07/01-11:35:05.134 7a17 Generated table #47@0: 1347 keys, 47731 bytes
+2026/07/01-11:35:05.134 7a17 Compacted 4@0 + 1@1 files => 47731 bytes
+2026/07/01-11:35:05.141 7a17 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/07/01-11:35:05.144 7a17 Delete type=2 #38
+2026/07/01-11:35:05.144 7a17 Delete type=2 #40
+2026/07/01-11:35:05.144 7a17 Delete type=2 #46
+2026/07/01-11:35:05.144 7a17 Delete type=2 #44
+2026/07/01-11:35:05.144 7a17 Delete type=2 #42

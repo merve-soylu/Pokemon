@@ -26,15 +26,23 @@ const BLOCKED_KEYWORDS = [
 
 const VALID_PRODUCT_WORDS = [
   "booster",
-  "booster pack",
-  "booster box",
-  "blister",
-  "bundle",
-  "tin",
-  "mini tin",
-  "pokemon",
-  "pokemon tcg",
-  "etb"
+    "booster pack",
+    "booster box",
+    "blister",
+    "bundle",
+    "pokemon",
+    "pokemon tcg",
+    "pokemon-tcg",
+    "Pokemon TCG",
+    "trading card",
+    "trading-card",
+    "pokemon trading card",
+    "pokemon-trading-card",
+    "pokemon-trading-card-game",
+    "trading card game",
+    "trading-card-game",
+    "tin",
+    "mini tin",
 ];
 
 const AVAILABILITY_KEYWORDS = [

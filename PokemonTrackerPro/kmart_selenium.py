@@ -9,7 +9,7 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
 
-PROFILE = "/home/pi/.mozilla/firefox/0ld0yusc.ebgames-profile"
+PROFILE = "/home/merve/.mozilla/firefox/0ld0yusc.ebgames-profile"
 
 class KmartSelenium:
 

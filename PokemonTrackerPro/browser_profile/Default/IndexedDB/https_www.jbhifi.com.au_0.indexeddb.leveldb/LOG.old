@@ -1,13 +1,14 @@
-2026/06/28-21:21:33.328 71e1 Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/IndexedDB/https_www.jbhifi.com.au_0.indexeddb.leveldb/MANIFEST-000001
-2026/06/28-21:21:33.329 71e1 Recovering log #7
-2026/06/28-21:21:33.329 71e1 Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/IndexedDB/https_www.jbhifi.com.au_0.indexeddb.leveldb/000007.log 
-2026/06/28-21:21:48.603 71e1 Level-0 table #11: started
-2026/06/28-21:21:48.613 71e1 Level-0 table #11: 2531 bytes OK
-2026/06/28-21:21:48.618 71e1 Delete type=0 #7
-2026/06/28-21:21:48.620 71e0 Manual compaction at level-0 from '\x00\x04\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x05\x00\x00\x00' @ 0 : 0; will stop at '\x00\x04\x01\x03\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 714 : 1
-2026/06/28-21:21:48.620 71e0 Compacting 1@0 + 1@1 files
-2026/06/28-21:21:48.626 71e0 Generated table #12@0: 100 keys, 1787 bytes
-2026/06/28-21:21:48.626 71e0 Compacted 1@0 + 1@1 files => 1787 bytes
-2026/06/28-21:21:48.631 71e0 compacted to: files[ 0 1 1 0 0 0 0 ]
-2026/06/28-21:21:48.632 71e0 Delete type=2 #11
-2026/06/28-21:21:48.636 71e0 Manual compaction at level-0 from '\x00\x04\x01\x03\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 714 : 1 .. '\x00\x05\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/01-12:03:39.969 79ea Reusing MANIFEST /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/IndexedDB/https_www.jbhifi.com.au_0.indexeddb.leveldb/MANIFEST-000001
+2026/07/01-12:03:39.971 79ea Recovering log #636
+2026/07/01-12:03:39.971 79ea Reusing old log /home/merve/Pokemon/Pokemon/PokemonTrackerPro/browser_profile/Default/IndexedDB/https_www.jbhifi.com.au_0.indexeddb.leveldb/000636.log 
+2026/07/01-12:03:39.973 79ea Delete type=2 #634
+2026/07/01-12:03:52.672 79ec Level-0 table #641: started
+2026/07/01-12:03:52.679 79ec Level-0 table #641: 2544 bytes OK
+2026/07/01-12:03:52.686 79ec Delete type=0 #636
+2026/07/01-12:03:52.686 79ea Manual compaction at level-0 from '\x00\xa0\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\xa1\x00\x00\x00' @ 0 : 0; will stop at '\x00\xa0\x01\x03\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 24117 : 1
+2026/07/01-12:03:52.687 79ea Compacting 1@0 + 1@1 files
+2026/07/01-12:03:52.694 79ea Generated table #642@0: 124 keys, 2591 bytes
+2026/07/01-12:03:52.694 79ea Compacted 1@0 + 1@1 files => 2591 bytes
+2026/07/01-12:03:52.699 79ea compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/07/01-12:03:52.700 79ea Delete type=2 #641
+2026/07/01-12:03:52.700 79ea Manual compaction at level-0 from '\x00\xa0\x01\x03\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 24117 : 1 .. '\x00\xa1\x00\x00\x00' @ 0 : 0; will stop at (end)
